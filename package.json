@@ -1,0 +1,37 @@
+{
+  "name": "pixel-printing",
+  "version": "0.1.0",
+  "description": "Parts of an image or element print in apart, under a glowing print head, then assemble into the whole. Dependency-free.",
+  "type": "module",
+  "main": "./src/pixel-printing.js",
+  "types": "./src/pixel-printing.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/pixel-printing.d.ts",
+      "default": "./src/pixel-printing.js"
+    },
+    "./style.css": "./src/pixel-printing.css"
+  },
+  "files": [
+    "src",
+    "skills"
+  ],
+  "sideEffects": [
+    "*.css"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "keywords": [
+    "animation",
+    "3d-printing",
+    "assemble",
+    "pixel",
+    "hero",
+    "landing-page"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "jsdom": "^26.1.0"
+  }
+}

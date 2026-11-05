@@ -1,0 +1,17 @@
+/* Optional. Add data-print-pending to an image or part to keep it hidden until pixel-printing
+   starts, so it doesn't flash finished first. If the script never runs, it appears after 4s. */
+[data-print-pending] {
+  visibility: hidden;
+  animation: pixel-printing-fallback 0s 4s forwards;
+}
+@keyframes pixel-printing-fallback {
+  to {
+    visibility: visible;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-print-pending] {
+    visibility: visible;
+    animation: none;
+  }
+}

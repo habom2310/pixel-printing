@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pixel Printing</title>
+<meta name="description" content="Parts of an image or element print in apart, then assemble into the whole. A dependency-free animation library." />
+<link rel="stylesheet" href="../src/pixel-printing.css" />
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #070b10;
+    --panel: #0c131b;
+    --raised: #111b25;
+    --line: #1b2733;
+    --ink: #e6edf3;
+    --muted: #8b9bab;
+    --glow: #5eead4;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  a { color: var(--glow); }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+  header.top { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; letter-spacing: -0.01em; }
+  .brand i { width: 14px; height: 14px; background: var(--glow); box-shadow: 0 0 12px var(--glow); display: block;
+    clip-path: polygon(0 0, 50% 0, 50% 50%, 100% 50%, 100% 100%, 0 100%); }
+  .top a { color: var(--muted); text-decoration: none; font-size: 14px; }
+  .top a:hover { color: var(--ink); }
+  .links { display: flex; gap: 20px; }
+
+  .hero { display: grid; grid-template-columns: 1fr 1.1fr; gap: 48px; align-items: center; padding-block: 40px 24px; }
+  .hero > * { min-width: 0; }
+  .eyebrow { font: 500 12px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--glow); }
+  h1 { font-size: clamp(34px, 5vw, 54px); line-height: 1.04; letter-spacing: -0.03em; margin: 14px 0 16px; font-weight: 700; }
+  .lede { color: var(--muted); font-size: 18px; max-width: 30em; margin: 0 0 24px; }
+  pre { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px;
+    font: 13px/1.6 var(--mono); color: #c9d6e2; overflow-x: auto; }
+  pre b { color: var(--glow); font-weight: 500; }
+  pre span { color: #5f7183; }
+
+  .bed { position: relative; border: 1px solid var(--line); border-radius: 16px; overflow: hidden;
+    background:
+      radial-gradient(ellipse at 50% 55%, rgb(94 234 212 / 0.08), transparent 65%),
+      linear-gradient(rgb(255 255 255 / 0.035) 1px, transparent 1px) 0 0 / 20px 20px,
+      linear-gradient(90deg, rgb(255 255 255 / 0.035) 1px, transparent 1px) 0 0 / 20px 20px,
+      var(--panel); }
+  .bed-label { position: absolute; left: 14px; top: 12px; font: 500 11px/1 var(--mono); letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }
+  .bed-label span { color: var(--glow); }
+  .robot-bed { display: grid; place-items: center; aspect-ratio: 1 / 0.92; }
+  .robot { width: 48%; display: block; }
+  .robot img { display: block; width: 100%; height: auto; }
+
+  .controls { position: sticky; top: 0; z-index: 5; background: rgb(7 11 16 / 0.86); backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px); border-block: 1px solid var(--line); margin: 24px 0 0; }
+  .controls .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; padding-block: 12px; }
+  .group { display: flex; align-items: center; gap: 10px; }
+  .group > span { font: 500 11px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .seg { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 3px; }
+  .seg button { font: 500 13px/1 system-ui, sans-serif; color: var(--muted); background: none; border: 0; border-radius: 6px;
+    padding: 8px 12px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--raised); color: var(--ink); box-shadow: inset 0 0 0 1px #24384a; }
+  .seg button:hover:not(:disabled) { color: var(--ink); }
+  .seg button:disabled { opacity: 0.35; cursor: default; }
+  .seg.arrows button { font-size: 15px; width: 36px; padding-inline: 0; }
+  .actions { margin-left: auto; display: flex; gap: 8px; }
+  .btn { font: 600 13px/1 system-ui, sans-serif; border-radius: 9px; padding: 10px 14px; cursor: pointer; border: 1px solid var(--line);
+    background: var(--panel); color: var(--ink); }
+  .btn.primary { background: var(--glow); color: #04231e; border-color: transparent; }
+  .btn:hover { filter: brightness(1.1); }
+  button:focus-visible { outline: 2px solid var(--glow); outline-offset: 2px; }
+  input[type="range"] { accent-color: var(--glow); width: 96px; }
+  output { font: 12px/1 var(--mono); color: var(--ink); min-width: 3.2em; }
+
+  section.demo { padding: 72px 0 8px; }
+  section.demo h2 { font-size: 26px; letter-spacing: -0.02em; margin: 8px 0 8px; }
+  section.demo > .wrap > p { color: var(--muted); max-width: 38em; margin: 0 0 24px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+  /* Live element demo */
+  .widget-bed { padding: 80px 40px 64px; display: grid; place-items: center; }
+  .widget { width: 100%; max-width: 440px; display: grid; gap: 10px; }
+  .w-card { background: #f4f6f8; color: #0f172a; border-radius: 12px; padding: 14px 16px; box-shadow: 0 1px 0 rgb(255 255 255 / 0.6) inset, 0 8px 24px rgb(0 0 0 / 0.35); }
+  .w-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .w-head h3 { margin: 0; font-size: 16px; }
+  .pill { font: 600 11px/1 system-ui, sans-serif; background: #ccfbf1; color: #0f766e; border-radius: 999px; padding: 6px 9px; white-space: nowrap; }
+  .w-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .w-stats .w-card { padding: 12px; }
+  .w-stats small { display: block; color: #64748b; font-size: 12px; }
+  .w-stats strong { font-size: 20px; letter-spacing: -0.02em; }
+  .bars { display: flex; align-items: flex-end; gap: 8px; height: 112px; }
+  .bars i { flex: 1; background: linear-gradient(#2dd4bf, #0d9488); border-radius: 4px 4px 2px 2px; }
+  .w-btn { justify-self: stretch; text-align: center; font: 600 14px/1 system-ui, sans-serif; background: #0f172a; color: #f8fafc;
+    border-radius: 10px; padding: 14px; }
+
+  .shot-bed { padding: 64px 64px 56px; }
+  .shot { border-radius: 10px; }
+  .shot img { display: block; width: 100%; height: auto; border-radius: 10px; }
+
+  .api { padding: 72px 0 96px; }
+  .api h2 { font-size: 26px; letter-spacing: -0.02em; margin: 8px 0 16px; }
+  footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; padding: 20px 0 32px; }
+
+  @media (max-width: 860px) {
+    .hero { grid-template-columns: 1fr; gap: 28px; padding-top: 16px; }
+    .two { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 560px) {
+    .wrap { padding: 0 16px; }
+    .lede { font-size: 16px; }
+    .controls .wrap { gap: 8px 10px; padding-block: 10px; }
+    .group > span { display: none; }
+    .group.speed { display: none; }
+    .actions { margin-left: 0; width: 100%; }
+    .actions .btn { flex: 1; }
+    .seg button { padding: 8px 6px; font-size: 12px; }
+    .group:first-child, .group:first-child .seg { width: 100%; }
+    .group:first-child .seg button { flex: 1; }
+    .seg.arrows button { width: 34px; }
+    .widget-bed { padding: 44px 16px 20px; }
+    .shot-bed { padding: 48px 24px 32px; }
+    .w-stats strong { font-size: 17px; }
+    pre { font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+<header class="wrap top">
+  <div class="brand"><i></i>Pixel Printing</div>
+  <nav class="links"><a href="robot-story.html">Robot teardown story</a><a href="https://github.com/habom2310/pixel-printing">GitHub</a></nav>
+</header>
+
+<main>
+  <div class="wrap hero">
+    <div>
+      <div class="eyebrow">Fabrication, in the browser</div>
+      <h1>Print it in parts.<br />Assemble the whole.</h1>
+      <p class="lede">Each part of an image or element prints in on its own, a little apart, under a glowing print head. Then the parts fly together and lock into place.</p>
+      <pre><code><b>import</b> { pixelPrint } <b>from</b> "pixel-printing";
+pixelPrint(img, { effect: "scan", depth: "3d" });</code></pre>
+    </div>
+    <div class="bed robot-bed">
+      <div class="bed-label">Bay 01 <span>/ robot.svg</span></div>
+      <div class="robot">
+        <img id="robot" src="robot.svg" alt="A friendly robot" width="600" height="640" data-print-pending
+          data-print-parts="26.83 38.91 46.33 39.38, 28.17 13.91 43.67 25, 15.83 45.16 9.67 34.06, 74.5 45.16 9.67 34.06, 31.17 77.97 37.67 18.75, 47.17 3.59 5.67 11.25" />
+      </div>
+    </div>
+  </div>
+
+  <div class="controls" role="toolbar" aria-label="Print settings">
+    <div class="wrap">
+      <div class="group"><span>Effect</span>
+        <div class="seg" data-key="effect" role="group" aria-label="Effect">
+          <button type="button" data-value="scan" aria-pressed="true">Scan</button>
+          <button type="button" data-value="layers" aria-pressed="false">Layers</button>
+          <button type="button" data-value="dust" aria-pressed="false">Dust</button>
+          <button type="button" data-value="random" aria-pressed="false">Random</button>
+          <button type="button" data-value="noise" aria-pressed="false">Noise</button>
+          <button type="button" data-value="radial" aria-pressed="false">Radial</button>
+        </div>
+      </div>
+      <div class="group" id="direction-group"><span>Direction</span>
+        <div class="seg arrows" data-key="direction" role="group" aria-label="Direction">
+          <button type="button" data-value="down" aria-pressed="true" aria-label="Down">↓</button>
+          <button type="button" data-value="up" aria-pressed="false" aria-label="Up">↑</button>
+          <button type="button" data-value="right" aria-pressed="false" aria-label="Right">→</button>
+          <button type="button" data-value="left" aria-pressed="false" aria-label="Left">←</button>
+        </div>
+      </div>
+      <div class="group"><span>Depth</span>
+        <div class="seg" data-key="depth" role="group" aria-label="Depth">
+          <button type="button" data-value="2d" aria-pressed="true">2D</button>
+          <button type="button" data-value="3d" aria-pressed="false">3D</button>
+        </div>
+      </div>
+      <label class="group speed"><span>Speed</span>
+        <input id="speed" type="range" min="0.25" max="3" step="0.25" value="1" />
+        <output id="speed-out" for="speed">1×</output>
+      </label>
+      <div class="actions">
+        <button type="button" class="btn" id="finish">Finish</button>
+        <button type="button" class="btn primary" id="replay">Replay</button>
+      </div>
+    </div>
+  </div>
+
+  <section class="demo">
+    <div class="wrap">
+      <div class="eyebrow">Live elements</div>
+      <h2>Real DOM, printed in place</h2>
+      <p>Mark blocks with <code>data-print-part</code> and print their container. Nothing is copied: the live elements move, so text stays selectable once they land. Every effect works here too.</p>
+      <div class="bed widget-bed">
+        <div class="bed-label">Bay 02 <span>/ live elements</span></div>
+        <div class="widget" id="widget">
+          <div class="w-card w-head" data-print-part data-print-pending><h3>Fabrication queue</h3><span class="pill">3 printing</span></div>
+          <div class="w-stats">
+            <div class="w-card" data-print-part data-print-pending><small>Parts</small><strong>1,284</strong></div>
+            <div class="w-card" data-print-part data-print-pending><small>Yield</small><strong>99.2%</strong></div>
+            <div class="w-card" data-print-part data-print-pending><small>Avg time</small><strong>4.1s</strong></div>
+          </div>
+          <div class="w-card" data-print-part data-print-pending><div class="bars" aria-label="Output by hour, rising">
+            <i style="height: 38%"></i><i style="height: 52%"></i><i style="height: 45%"></i><i style="height: 66%"></i><i style="height: 58%"></i><i style="height: 80%"></i><i style="height: 92%"></i>
+          </div></div>
+          <div class="w-btn" data-print-part data-print-pending>Start next batch</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="demo">
+    <div class="wrap">
+      <div class="eyebrow">Screenshots</div>
+      <h2>Any picture, split into components</h2>
+      <p>Give an image its parts as percent rectangles. The sidebar, header, cards, chart and list each print on their own, then dock into the layout.</p>
+      <div class="bed shot-bed">
+        <div class="bed-label">Bay 03 <span>/ app.svg</span></div>
+        <div class="shot">
+          <img id="shot" src="app.svg" alt="An analytics dashboard" width="1200" height="800" data-print-pending
+            data-print-parts="0 0 18.33 100, 21 3.5 46.67 5.5, 85.67 3.5 11.67 5.5, 21 13 24.33 16, 47 13 24.33 16, 73 13 24.33 16, 21 32 50.33 64, 73 32 24.33 64" />
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="api">
+    <div class="wrap">
+      <div class="eyebrow">API</div>
+      <h2>One call per object</h2>
+      <pre><code><b>const</b> print = pixelPrint(target, {
+  effect: "scan",   <span>// "scan" | "layers" | "dust" | "random" | "noise" | "radial"</span>
+  direction: "down", <span>// "down" | "up" | "right" | "left"</span>
+  depth: "2d",      <span>// "2d" | "3d"</span>
+  spread: 0.3,      <span>// how far apart parts start</span>
+  color: "#5eead4", <span>// print head and tint</span>
+  start: "visible", <span>// or "now"</span>
+});
+<b>await</b> print.finished; <span>// or print.finish(), print.destroy(), print.setSpeed(2)</span></code></pre>
+    </div>
+  </section>
+</main>
+<footer><div class="wrap">MIT licensed. Respects reduced motion. No dependencies.</div></footer>
+
+<script type="module">
+  import { pixelPrint } from "../src/pixel-printing.js";
+
+  const settings = { effect: "scan", direction: "down", depth: "2d", speed: 1 };
+  const DIRECTED = ["scan", "layers", "dust"];
+  let directionPicked = false;
+  const press = (seg, value) =>
+    seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.value === value)));
+  const directionSeg = document.querySelector('[data-key="direction"]');
+  // Patterns without a direction grey the arrows out; layers default to building up.
+  function syncDirection() {
+    const directed = DIRECTED.includes(settings.effect);
+    directionSeg.querySelectorAll("button").forEach((b) => (b.disabled = !directed));
+    if (!directionPicked) settings.direction = settings.effect === "layers" ? "up" : "down";
+    press(directionSeg, settings.direction);
+  }
+  // Spread is a fraction of each object's smaller side, so the wide widget and screenshot need less.
+  const narrow = matchMedia("(max-width: 560px)");
+  const targets = [
+    { id: "robot", spread: 0.3 },
+    { id: "widget", spread: 0.16, narrowSpread: 0.07 },
+    { id: "shot", spread: 0.12, narrowSpread: 0.08 },
+  ];
+  let prints = [];
+
+  function play() {
+    prints.forEach((p) => p.destroy());
+    prints = targets.map(({ id, spread, narrowSpread = spread }) =>
+      pixelPrint(document.getElementById(id), { ...settings, spread: narrow.matches ? narrowSpread : spread }),
+    );
+  }
+
+  for (const seg of document.querySelectorAll(".seg")) {
+    seg.addEventListener("click", (e) => {
+      const button = e.target.closest("button");
+      if (!button) return;
+      settings[seg.dataset.key] = button.dataset.value;
+      press(seg, button.dataset.value);
+      if (seg === directionSeg) directionPicked = true;
+      syncDirection();
+      play();
+    });
+  }
+  const speed = document.getElementById("speed");
+  const out = document.getElementById("speed-out");
+  speed.addEventListener("input", () => {
+    settings.speed = Number(speed.value);
+    out.textContent = `${settings.speed}×`;
+    prints.forEach((p) => p.setSpeed(settings.speed));
+  });
+  document.getElementById("replay").addEventListener("click", play);
+  document.getElementById("finish").addEventListener("click", () => prints.forEach((p) => p.finish()));
+  syncDirection();
+  play();
+</script>
+</body>
+</html>
