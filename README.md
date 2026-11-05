@@ -89,6 +89,10 @@ python3 -m http.server 4320
 
 Then open http://localhost:4320/examples/.
 
+[examples/robot-story.html](examples/robot-story.html) is a scroll story built on element mode.
+The robot is made of part elements, so after it prints and assembles, the same elements walk with CSS animations.
+Each screen below prints one part's exploded components with callouts, while the robot shrinks to a quarter-size miniature in the corner, then returns to the centre at the end.
+
 ## License
 
 MIT

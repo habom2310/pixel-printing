@@ -52,6 +52,13 @@ function rgb(color) {
   return m ? m.slice(1, 4).map(Number) : null;
 }
 
+/** How much ancestor transforms scale a node on screen, so measurements can be taken back to CSS px. */
+function screenScale(node, rect) {
+  const sx = node.offsetWidth ? rect.width / node.offsetWidth : 1;
+  const sy = node.offsetHeight ? rect.height / node.offsetHeight : 1;
+  return [sx || 1, sy || 1];
+}
+
 function imageSource(node) {
   if (node instanceof HTMLImageElement) return node.currentSrc || node.src;
   return getComputedStyle(node).backgroundImage.match(/url\(["']?(.*?)["']?\)/)?.[1] ?? "";
@@ -469,13 +476,14 @@ function imageJob(node, regions, src, o) {
     const n = (k) => parseFloat(cs[k]) || 0;
     const r = node.getBoundingClientRect();
     const p = parent.getBoundingClientRect();
+    const [sx, sy] = screenScale(parent, p);
     const l = n("borderLeftWidth") + n("paddingLeft");
     const t = n("borderTopWidth") + n("paddingTop");
-    const w = r.width - l - n("borderRightWidth") - n("paddingRight");
-    const h = r.height - t - n("borderBottomWidth") - n("paddingBottom");
+    const w = r.width / sx - l - n("borderRightWidth") - n("paddingRight");
+    const h = r.height / sy - t - n("borderBottomWidth") - n("paddingBottom");
     Object.assign(layer.style, {
-      left: px(r.left + l - p.left - parent.clientLeft + parent.scrollLeft),
-      top: px(r.top + t - p.top - parent.clientTop + parent.scrollTop),
+      left: px((r.left - p.left) / sx + l - parent.clientLeft + parent.scrollLeft),
+      top: px((r.top - p.top) / sy + t - parent.clientTop + parent.scrollTop),
       width: px(w),
       height: px(h),
     });
@@ -613,15 +621,24 @@ function elementJob(container, nodes, o) {
     if (!container.isConnected) return (job.detached = true);
     parts.forEach((p) => (p.node.style.transform = p.rest.transform));
     const c = container.getBoundingClientRect();
-    const ox = c.left + container.clientLeft - container.scrollLeft;
-    const oy = c.top + container.clientTop - container.scrollTop;
+    // In CSS px of the container, even when an ancestor scales it on screen.
+    const [sx, sy] = screenScale(container, c);
+    const cw = c.width / sx;
+    const ch = c.height / sy;
     const dpr = dprNow();
     parts.forEach((p) => {
       const r = p.node.getBoundingClientRect();
-      Object.assign(p, { x: r.left - ox, y: r.top - oy, w: r.width, h: r.height });
-      const cx = r.left + r.width / 2 - (c.left + c.width / 2);
-      const cy = r.top + r.height / 2 - (c.top + c.height / 2);
-      Object.assign(p, offsetFor(cx, cy, c.width, c.height, o.spread, p.given));
+      const x = (r.left - c.left) / sx;
+      const y = (r.top - c.top) / sy;
+      Object.assign(p, {
+        x: x - container.clientLeft + container.scrollLeft,
+        y: y - container.clientTop + container.scrollTop,
+        w: r.width / sx,
+        h: r.height / sy,
+      });
+      const cx = x + p.w / 2 - cw / 2;
+      const cy = y + p.h / 2 - ch / 2;
+      Object.assign(p, offsetFor(cx, cy, cw, ch, o.spread, p.given));
       sizePart(p, dpr, o);
       Object.assign(p.fx.style, { left: px(p.x - FX), top: px(p.y - FX) });
     });

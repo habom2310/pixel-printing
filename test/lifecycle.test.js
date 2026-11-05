@@ -437,3 +437,20 @@ test("scan follows the direction", async () => {
   assert.deepEqual(await clipAt("left"), ["120px -40px", "120px 80px"]);
   assert.deepEqual(await clipAt("up"), ["-40px 80px", "120px 80px"]);
 });
+
+test("element mode measures in CSS px when an ancestor scales the container", async () => {
+  const { container, parts } = sizedWidget();
+  // Shown at half size: 200x160 CSS px appear as 100x80 on screen.
+  Object.defineProperty(container, "offsetWidth", { value: 400 });
+  Object.defineProperty(container, "offsetHeight", { value: 320 });
+  const print = pixelPrint(container, { start: "now", speed: 0.6 });
+  let clip = "";
+  for (let i = 0; i < 200 && !clip.startsWith("polygon"); i++) {
+    await wait(10);
+    clip = parts[0].style.clipPath;
+  }
+  print.destroy();
+  await print.finished;
+  // An 80px-wide part on screen is 160px wide in CSS px: its sweep edge reaches 160 + 40.
+  assert.match(clip, /^polygon\(-40px -40px, 200px -40px/);
+});

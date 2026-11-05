@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Robot Teardown</title>
+<meta name="description" content="A robot prints, assembles and walks. Scroll to see what each part is made of." />
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #070b10;
+    --panel: #0c131b;
+    --line: #1b2733;
+    --ink: #e6edf3;
+    --muted: #8b9bab;
+    --glow: #5eead4;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    /* Set from JS to fit the viewport. */
+    --rw: 300px;
+    --rh: 320px;
+    --range: 90px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-snap-type: y proximity; -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+    background-image:
+      linear-gradient(rgb(255 255 255 / 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(255 255 255 / 0.03) 1px, transparent 1px);
+    background-size: 24px 24px; background-attachment: fixed; }
+  a { color: var(--glow); }
+  .eyebrow { font: 500 12px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--glow); }
+
+  /* The robot lives in a fixed dock: centred on the first and last screens, a miniature in the corner between. */
+  .dock { position: fixed; z-index: 10; left: 50%; top: 60%; width: var(--rw); height: var(--rh);
+    margin: calc(var(--rh) / -2) 0 0 calc(var(--rw) / -2); pointer-events: none; perspective: 900px;
+    transform: var(--dock, none); transition: transform 1s cubic-bezier(0.65, 0, 0.35, 1); }
+  .dock::before { content: ""; position: absolute; inset: -40px calc(-1 * var(--range) - 40px); border: 4px solid var(--line);
+    border-radius: 56px; background: rgb(12 19 27 / 0.94); opacity: 0; transition: opacity 0.6s; }
+  .dock.mini::before { opacity: 1; }
+  .walker { position: absolute; inset: 0; will-change: transform; }
+  .robot { position: absolute; inset: 0; }
+  .rp { position: absolute; }
+  .limb { width: 100%; height: 100%; transition: filter 0.4s; }
+  .limb svg { display: block; width: 100%; height: 100%; overflow: visible; }
+
+  /* Walk cycle: arms and legs swing in opposition, the upper body bobs twice per stride. */
+  .robot.walking .arm-l .limb, .robot.walking .arm-r .limb { transform-origin: 50% 10%; animation: swing 0.9s ease-in-out infinite alternate; }
+  .robot.walking .arm-r .limb, .robot.walking .leg-l .limb { animation-direction: alternate-reverse; }
+  .robot.walking .leg-l .limb, .robot.walking .leg-r .limb { transform-origin: 51% 5%; animation: stride 0.9s ease-in-out infinite alternate; }
+  .robot.walking .leg-l .limb { animation-direction: alternate-reverse; }
+  .robot.walking .body .limb, .robot.walking .head .limb { animation: bob 0.45s ease-in-out infinite alternate; }
+  .robot.walking .antenna .limb { transform-origin: 50% 95%; animation: bob 0.45s ease-in-out infinite alternate, wiggle 0.9s ease-in-out infinite alternate; }
+  @keyframes swing { from { rotate: 16deg; } to { rotate: -16deg; } }
+  @keyframes stride { from { rotate: 9deg; } to { rotate: -9deg; } }
+  @keyframes bob { from { translate: 0 0; } to { translate: 0 calc(var(--rh) * -0.01); } }
+  @keyframes wiggle { from { rotate: -8deg; } to { rotate: 8deg; } }
+  /* The part the current screen explains glows on the miniature. */
+  .robot[data-focus="arms"] :is(.arm-l, .arm-r) .limb,
+  .robot[data-focus="body"] .body .limb,
+  .robot[data-focus="legs"] :is(.leg-l, .leg-r) .limb,
+  .robot[data-focus="head"] :is(.head, .antenna) .limb { filter: drop-shadow(0 0 10px var(--glow)) drop-shadow(0 0 3px var(--glow)); }
+
+  section { position: relative; min-height: 100vh; min-height: 100svh; scroll-snap-align: start; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+  .stage-screen { text-align: center; padding-top: clamp(40px, 9vh, 96px); }
+  .stage-screen h1, .stage-screen h2 { font-size: clamp(32px, 5vw, 52px); line-height: 1.05; letter-spacing: -0.03em; margin: 14px 0 12px; }
+  .stage-screen p { color: var(--muted); font-size: 18px; max-width: 32em; margin: 0 auto; }
+  .hint { position: absolute; left: 50%; bottom: 20px; translate: -50% 0; font: 500 12px/1 var(--mono); letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--muted); opacity: 0; transition: opacity 0.6s; }
+  .assembled .hint { opacity: 1; }
+  .hint::after { content: ""; display: block; width: 1px; height: 28px; margin: 10px auto 0; background: linear-gradient(var(--glow), transparent); }
+  .btn { margin-top: 20px; font: 600 14px/1 system-ui, sans-serif; border-radius: 10px; padding: 12px 16px; cursor: pointer;
+    border: 0; background: var(--glow); color: #04231e; }
+  .btn:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
+
+  .part-screen { display: grid; align-items: center; padding: 72px 0 120px; }
+  .part-screen .wrap { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.5fr); gap: 40px; align-items: center; width: 100%; }
+  .part-screen h2 { font-size: clamp(28px, 3.6vw, 40px); line-height: 1.08; letter-spacing: -0.02em; margin: 12px 0 12px; }
+  .part-screen p { color: var(--muted); margin: 0; }
+  .legend { display: none; list-style: none; padding: 0; margin: 0; gap: 10px; }
+  .legend li { display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: start; font-size: 14px; }
+  .legend b { display: block; }
+  .legend span { color: var(--muted); }
+
+  /* 600 by 480, with the 600 by 400 drawing (.frame) in the middle, so parts have room to start apart. */
+  .detail { position: relative; aspect-ratio: 600 / 480; border: 1px solid var(--line); border-radius: 18px;
+    background: radial-gradient(ellipse at 50% 50%, rgb(94 234 212 / 0.07), transparent 60%), var(--panel); }
+  .detail .label-bay { position: absolute; left: 16px; top: 14px; font: 500 11px/1 var(--mono); letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }
+  .frame { position: absolute; inset: 8.333% 0; }
+  .parts { position: absolute; inset: 0; }
+  .leaders { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+  .leaders line { stroke: var(--glow); stroke-width: 1.2; stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset 0.6s cubic-bezier(0.3, 0, 0.2, 1);
+    transition-delay: calc(var(--i) * 0.12s); vector-effect: non-scaling-stroke; }
+  .leaders circle { fill: var(--glow); opacity: 0; transition: opacity 0.3s; transition-delay: calc(var(--i) * 0.12s + 0.45s); }
+  .num { position: absolute; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; display: none; place-items: center;
+    background: var(--glow); color: #04231e; font: 700 11px/1 system-ui, sans-serif; opacity: 0; transition: opacity 0.3s;
+    transition-delay: calc(var(--i) * 0.12s + 0.3s); }
+  .legend .num { position: static; display: grid; margin: 0; opacity: 1; }
+  .callout { position: absolute; width: 27%; translate: 0 -50%; font-size: 13px; line-height: 1.35; opacity: 0;
+    transition: opacity 0.4s, transform 0.4s; transition-delay: calc(var(--i) * 0.12s + 0.35s); }
+  .callout.left { left: 2%; text-align: right; transform: translateX(-8px); }
+  .callout.right { left: 71%; transform: translateX(8px); }
+  .callout b { display: block; font-size: 14px; }
+  .callout span { color: var(--muted); }
+  .detail.explained .leaders line { stroke-dashoffset: 0; }
+  .detail.explained .leaders circle, .detail.explained .num { opacity: 1; }
+  .detail.explained .callout { opacity: 1; transform: none; }
+
+  @media (max-width: 760px) {
+    .wrap { padding: 0 16px; }
+    .stage-screen p { font-size: 16px; }
+    .part-screen { padding: 56px 0 140px; }
+    .part-screen .wrap { grid-template-columns: 1fr; gap: 20px; }
+    .callout, .leaders { display: none; }
+    .num { display: grid; }
+    .legend { display: grid; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dock, .dock::before, .limb, .callout, .leaders line, .leaders circle, .num { transition: none; }
+    .robot.walking .limb { animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="dock" id="dock" aria-hidden="true">
+  <div class="walker" id="walker"><div class="robot" id="robot"></div></div>
+</div>
+
+<main>
+  <section class="stage-screen" id="intro" data-dock="center">
+    <div class="wrap">
+      <div class="eyebrow">Pixel Printing · Teardown</div>
+      <h1>What is a robot made of?</h1>
+      <p>Watch it print in parts, assemble and take its first steps. Then scroll to take it apart, one part per screen.</p>
+    </div>
+    <div class="hint">Scroll</div>
+  </section>
+
+  <section class="part-screen" data-dock="mini" data-part="arms" data-effect="scan">
+    <div class="wrap">
+      <div><div class="eyebrow">Part 01 / Arms</div><h2>Arms that print in four pieces</h2>
+        <p>Each arm is a servo, a hollow shell, a bearing and a gripper. They print top to bottom and press together at the shoulder.</p></div>
+      <div class="detail" data-detail="arms"><div class="label-bay">Bay 01 / arm, exploded</div></div>
+    </div>
+  </section>
+
+  <section class="part-screen" data-dock="mini" data-part="body" data-effect="noise">
+    <div class="wrap">
+      <div><div class="eyebrow">Part 02 / Body</div><h2>A chest built around its core</h2>
+        <p>The body is a shell around a power core and a swappable battery. Material condenses in blobs, like resin curing.</p></div>
+      <div class="detail" data-detail="body"><div class="label-bay">Bay 02 / body, exploded</div></div>
+    </div>
+  </section>
+
+  <section class="part-screen" data-dock="mini" data-part="legs" data-effect="layers">
+    <div class="wrap">
+      <div><div class="eyebrow">Part 03 / Legs</div><h2>Legs that carry the load</h2>
+        <p>Every leg builds up layer by layer from the bed: hip joint, piston, spring and foot.</p></div>
+      <div class="detail" data-detail="legs"><div class="label-bay">Bay 03 / leg, exploded</div></div>
+    </div>
+  </section>
+
+  <section class="part-screen" data-dock="mini" data-part="head" data-effect="radial">
+    <div class="wrap">
+      <div><div class="eyebrow">Part 04 / Head</div><h2>A head full of sensors</h2>
+        <p>The head grows from the centre out: antenna, shell, a visor with two cameras, and an audio pod on each side.</p></div>
+      <div class="detail" data-detail="head"><div class="label-bay">Bay 04 / head, exploded</div></div>
+    </div>
+  </section>
+
+  <section class="stage-screen" id="outro" data-dock="center">
+    <div class="wrap">
+      <div class="eyebrow">Assembled</div>
+      <h2>All together now</h2>
+      <p>Every part you just saw, printed and pressed into one robot.</p>
+      <button type="button" class="btn" id="again">Print it again</button>
+    </div>
+  </section>
+</main>
+
+<script type="module">
+  import { pixelPrint } from "../src/pixel-printing.js";
+
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const NS = "http://www.w3.org/2000/svg";
+  const STROKE = { stroke: "#1e293b", "stroke-width": 6, "stroke-linejoin": "round", "stroke-linecap": "round" };
+  const C = { shell: "#e2e8f0", mid: "#cbd5e1", dark: "#94a3b8", deep: "#0f172a", accent: "#ff7a45", eye: "#22d3ee", warm: "#fff7ed" };
+
+  function svgEl(tag, attrs = {}, kids = []) {
+    const node = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    kids.forEach((k) => node.appendChild(k));
+    return node;
+  }
+  /** One drawing whose viewBox is its own box in the shared coordinates, so shapes keep global numbers. */
+  const drawing = ([x, y, w, h], shapes, strokeWidth = 6) =>
+    svgEl("svg", { viewBox: `${x} ${y} ${w} ${h}`, "aria-hidden": "true" }, [
+      svgEl("g", { ...STROKE, "stroke-width": strokeWidth }, shapes.map(([tag, attrs]) => svgEl(tag, attrs))),
+    ]);
+  /** A printable part: positioned in percent of a W by H space, with an inner .limb that animations move. */
+  function partEl(parent, cls, [x0, y0, x1, y1], [W, H], shapes, strokeWidth) {
+    const box = [x0, y0, x1 - x0, y1 - y0];
+    const node = document.createElement("div");
+    node.className = `rp ${cls}`;
+    node.dataset.printPart = "";
+    Object.assign(node.style, {
+      left: `${(x0 / W) * 100}%`, top: `${(y0 / H) * 100}%`,
+      width: `${(box[2] / W) * 100}%`, height: `${(box[3] / H) * 100}%`,
+    });
+    const limb = document.createElement("div");
+    limb.className = "limb";
+    limb.appendChild(drawing(box, shapes, strokeWidth));
+    node.appendChild(limb);
+    parent.appendChild(node);
+    return node;
+  }
+
+  // The robot, part by part, in robot.svg's 600 by 640 coordinates. Order is print order.
+  const R = [600, 640];
+  const robot = document.getElementById("robot");
+  const arm = (cx) => [
+    ["rect", { x: cx - 26, y: 292, width: 52, height: 166, rx: 26, fill: C.mid }],
+    ["circle", { cx, cy: 478, r: 26, fill: C.accent }],
+  ];
+  const leg = (cx) => [
+    ["rect", { x: cx - 29, y: 502, width: 58, height: 84, rx: 14, fill: C.dark }],
+    ["rect", { x: cx - 51, y: 580, width: 100, height: 36, rx: 18, fill: C.shell }],
+  ];
+  partEl(robot, "body", [161, 249, 439, 501], R, [
+    ["rect", { x: 268, y: 252, width: 64, height: 26, fill: C.dark }],
+    ["rect", { x: 164, y: 276, width: 272, height: 222, rx: 32, fill: C.shell }],
+    ["rect", { x: 214, y: 310, width: 172, height: 130, rx: 16, fill: C.mid }],
+    ["circle", { cx: 300, cy: 372, r: 34, fill: C.accent }],
+    ["circle", { cx: 300, cy: 372, r: 14, fill: C.warm, stroke: "none" }],
+    ["rect", { x: 234, y: 458, width: 132, height: 16, rx: 8, fill: C.dark }],
+  ]);
+  partEl(robot, "head", [169, 89, 431, 249], R, [
+    ["rect", { x: 172, y: 140, width: 22, height: 64, rx: 8, fill: C.dark }],
+    ["rect", { x: 406, y: 140, width: 22, height: 64, rx: 8, fill: C.dark }],
+    ["rect", { x: 192, y: 92, width: 216, height: 154, rx: 30, fill: C.shell }],
+    ["rect", { x: 220, y: 124, width: 160, height: 78, rx: 18, fill: C.deep }],
+    ["circle", { cx: 264, cy: 163, r: 15, fill: C.eye, stroke: "none" }],
+    ["circle", { cx: 336, cy: 163, r: 15, fill: C.eye, stroke: "none" }],
+    ["rect", { x: 270, y: 216, width: 60, height: 10, rx: 5, fill: C.dark, stroke: "none" }],
+  ]);
+  partEl(robot, "leg-l", [187, 499, 293, 619], R, leg(241));
+  partEl(robot, "leg-r", [307, 499, 413, 619], R, leg(359));
+  partEl(robot, "arm-l", [95, 289, 153, 507], R, arm(124));
+  partEl(robot, "arm-r", [447, 289, 505, 507], R, arm(476));
+  partEl(robot, "antenna", [283, 23, 317, 95], R, [
+    ["line", { x1: 300, y1: 50, x2: 300, y2: 92 }],
+    ["circle", { cx: 300, cy: 40, r: 14, fill: C.accent }],
+  ]);
+
+  // Exploded details, in a 600 by 400 space; the drawing sits in the middle third, callouts either side.
+  const D = [600, 400];
+  const zigzag = (x, y) => `${x - 14},${y} ${x + 14},${y + 8} ${x - 14},${y + 16} ${x + 14},${y + 24} ${x - 14},${y + 32}`;
+  const DETAILS = {
+    arms: [
+      { box: [250, 26, 350, 104], shapes: [["rect", { x: 260, y: 36, width: 80, height: 58, rx: 12, fill: C.dark }], ["circle", { cx: 300, cy: 65, r: 17, fill: C.accent }], ["circle", { cx: 300, cy: 65, r: 5, fill: C.deep, stroke: "none" }]],
+        at: [262, 50], side: "left", y: 16, title: "Shoulder servo", text: "Brushless, 12 kg·cm of torque" },
+      { box: [264, 114, 336, 236], shapes: [["rect", { x: 268, y: 118, width: 64, height: 114, rx: 32, fill: C.mid }], ["rect", { x: 292, y: 140, width: 16, height: 70, rx: 8, fill: C.shell }]],
+        at: [332, 170], side: "right", y: 42, title: "Arm shell", text: "Hollow, printed in 0.1 mm layers" },
+      { box: [276, 246, 324, 294], shapes: [["circle", { cx: 300, cy: 270, r: 20, fill: C.shell }], ["circle", { cx: 300, cy: 270, r: 8, fill: C.deep }]],
+        at: [282, 266], side: "left", y: 66, title: "Elbow bearing", text: "Sealed steel races" },
+      { box: [262, 302, 338, 384], shapes: [["rect", { x: 271, y: 338, width: 16, height: 42, rx: 8, fill: C.dark }], ["rect", { x: 313, y: 338, width: 16, height: 42, rx: 8, fill: C.dark }], ["circle", { cx: 300, cy: 330, r: 25, fill: C.accent }]],
+        at: [326, 356], side: "right", y: 88, title: "Gripper", text: "Two fingers with soft pads" },
+    ],
+    body: [
+      { box: [262, 10, 338, 44], shapes: [["rect", { x: 266, y: 14, width: 68, height: 26, rx: 6, fill: C.dark }]],
+        at: [268, 24], side: "left", y: 9, title: "Neck collar", text: "Carries the head's cables" },
+      { box: [196, 52, 404, 222], shapes: [["rect", { x: 200, y: 56, width: 200, height: 162, rx: 28, fill: C.shell }], ["rect", { x: 236, y: 82, width: 128, height: 96, rx: 14, fill: C.mid }], ["circle", { cx: 300, cy: 130, r: 22, fill: C.deep }]],
+        at: [400, 120], side: "right", y: 34, title: "Front shell", text: "Impact-resistant polymer" },
+      { box: [262, 232, 338, 306], shapes: [["circle", { cx: 300, cy: 269, r: 33, fill: C.accent }], ["circle", { cx: 300, cy: 269, r: 13, fill: C.warm, stroke: "none" }]],
+        at: [268, 262], side: "left", y: 66, title: "Power core", text: "Glows when it is charged" },
+      { box: [212, 316, 388, 386], shapes: [["rect", { x: 216, y: 320, width: 168, height: 62, rx: 12, fill: C.deep }], ...[0, 1, 2, 3].map((i) => ["rect", { x: 232 + i * 38, y: 334, width: 28, height: 34, rx: 6, fill: C.eye, stroke: "none" }])],
+        at: [384, 350], side: "right", y: 87, title: "Battery", text: "Four cells, swappable" },
+    ],
+    legs: [
+      { box: [256, 14, 344, 72], shapes: [["rect", { x: 260, y: 18, width: 80, height: 50, rx: 14, fill: C.dark }], ["circle", { cx: 300, cy: 43, r: 11, fill: C.accent }]],
+        at: [262, 40], side: "left", y: 11, title: "Hip joint", text: "Moves on two axes" },
+      { box: [268, 82, 332, 236], shapes: [["rect", { x: 272, y: 86, width: 56, height: 146, rx: 16, fill: C.dark }], ["rect", { x: 293, y: 104, width: 14, height: 110, rx: 7, fill: C.shell }]],
+        at: [328, 160], side: "right", y: 40, title: "Leg piston", text: "Telescopic, 40 mm of travel" },
+      { box: [278, 244, 322, 286], shapes: [["polyline", { points: zigzag(300, 248), fill: "none", "stroke-width": 5 }]],
+        at: [286, 262], side: "left", y: 66, title: "Ankle spring", text: "Absorbs every step" },
+      { box: [226, 296, 374, 364], shapes: [["rect", { x: 230, y: 300, width: 140, height: 56, rx: 28, fill: C.shell }], ...[0, 1, 2, 3, 4].map((i) => ["line", { x1: 258 + i * 21, y1: 346, x2: 258 + i * 21, y2: 356, "stroke-width": 4 }])],
+        at: [370, 330], side: "right", y: 84, title: "Foot", text: "Grippy rubber tread" },
+    ],
+    head: [
+      { box: [284, 8, 316, 78], shapes: [["line", { x1: 300, y1: 34, x2: 300, y2: 74 }], ["circle", { cx: 300, cy: 24, r: 13, fill: C.accent }]],
+        at: [288, 24], side: "left", y: 8, title: "Antenna", text: "Wireless link to base" },
+      { box: [196, 86, 404, 214], shapes: [["rect", { x: 200, y: 90, width: 200, height: 120, rx: 28, fill: C.shell }], ["rect", { x: 230, y: 116, width: 140, height: 64, rx: 16, fill: "none", "stroke-dasharray": "8 8", "stroke-width": 4 }]],
+        at: [400, 150], side: "right", y: 37, title: "Head shell", text: "Snap-fit, no screws" },
+      { box: [226, 224, 374, 294], shapes: [["rect", { x: 230, y: 228, width: 140, height: 62, rx: 16, fill: C.deep }], ["circle", { cx: 270, cy: 259, r: 14, fill: C.eye, stroke: "none" }], ["circle", { cx: 330, cy: 259, r: 14, fill: C.eye, stroke: "none" }]],
+        at: [244, 248], side: "left", y: 65, title: "Visor", text: "Two cameras behind glass" },
+      { box: [214, 304, 386, 372], shapes: [["rect", { x: 218, y: 308, width: 26, height: 60, rx: 9, fill: C.dark }], ["rect", { x: 356, y: 308, width: 26, height: 60, rx: 9, fill: C.dark }], ["line", { x1: 244, y1: 338, x2: 356, y2: 338, "stroke-dasharray": "6 8", "stroke-width": 4 }]],
+        at: [382, 338], side: "right", y: 85, title: "Audio pods", text: "A microphone on each side" },
+    ],
+  };
+
+  const details = [...document.querySelectorAll("[data-detail]")].map((stage) => {
+    const items = DETAILS[stage.dataset.detail];
+    const frame = document.createElement("div");
+    frame.className = "frame";
+    const parts = document.createElement("div");
+    parts.className = "parts";
+    frame.appendChild(parts);
+    stage.appendChild(frame);
+    items.forEach((item) => partEl(parts, "", item.box, D, item.shapes, 5));
+    // Leader lines from each callout to a dot on its component, in the same 600 by 400 space.
+    const leaders = svgEl("svg", { class: "leaders", viewBox: "0 0 600 400", "aria-hidden": "true" });
+    const legend = document.createElement("ol");
+    legend.className = "legend";
+    items.forEach((item, i) => {
+      const [ax, ay] = item.at;
+      const ly = (item.y / 100) * 400;
+      const lx = item.side === "left" ? 176 : 420;
+      const style = `--i: ${i}`;
+      leaders.append(
+        svgEl("line", { x1: lx, y1: ly, x2: ax, y2: ay, pathLength: 1, style }),
+        svgEl("circle", { cx: ax, cy: ay, r: 4, style }),
+      );
+      const callout = document.createElement("div");
+      callout.className = `callout ${item.side}`;
+      callout.style.cssText = `top: ${item.y}%; --i: ${i}`;
+      const title = document.createElement("b");
+      title.textContent = item.title;
+      const text = document.createElement("span");
+      text.textContent = item.text;
+      callout.append(title, text);
+      // On phones the callouts become numbers on the drawing and a list under it.
+      const num = document.createElement("span");
+      num.className = "num";
+      num.textContent = String(i + 1);
+      num.style.cssText = `left: ${(ax / 600) * 100}%; top: ${(ay / 400) * 100}%; --i: ${i}`;
+      frame.append(callout, num);
+      const li = document.createElement("li");
+      const n = document.createElement("span");
+      n.className = "num";
+      n.textContent = String(i + 1);
+      const words = document.createElement("div");
+      words.append(title.cloneNode(true), text.cloneNode(true));
+      li.append(n, words);
+      legend.appendChild(li);
+    });
+    frame.appendChild(leaders);
+    stage.after(legend);
+    return { stage, parts, effect: stage.closest("section").dataset.effect };
+  });
+
+  // Each detail prints when its screen scrolls into view, then explains itself.
+  details.forEach(({ stage, parts, effect }) =>
+    pixelPrint(parts, { effect, spread: 0.1, onDone: () => stage.classList.add("explained") }),
+  );
+
+  // --- Size, docking and walking ---
+  const dock = document.getElementById("dock");
+  const walker = document.getElementById("walker");
+  let size = { rw: 300, rh: 320, range: 90 };
+  let docked = "center";
+  function fit() {
+    const rh = Math.min(innerHeight * 0.46, 400, (innerWidth * 0.6 * 640) / 600);
+    const rw = (rh * 600) / 640;
+    size = { rw, rh, range: rw * 0.3 };
+    document.documentElement.style.setProperty("--rw", `${rw}px`);
+    document.documentElement.style.setProperty("--rh", `${rh}px`);
+    document.documentElement.style.setProperty("--range", `${size.range}px`);
+    place();
+  }
+  /** Centre, or a quarter-size miniature in the bottom-right corner. */
+  function place() {
+    if (docked === "center") return dock.style.setProperty("--dock", "none");
+    const s = 0.25;
+    const margin = innerWidth < 560 ? 12 : 24;
+    const halfW = ((size.rw / 2 + size.range + 44) * s);
+    const halfH = ((size.rh / 2 + 44) * s);
+    const x = innerWidth - margin - halfW - innerWidth / 2;
+    const y = innerHeight - margin - halfH - innerHeight * 0.6;
+    dock.style.setProperty("--dock", `translate(${x}px, ${y}px) scale(${s})`);
+  }
+  addEventListener("resize", fit);
+  fit();
+
+  // The screen crossing the middle of the viewport decides where the robot sits and what glows.
+  const screens = document.querySelectorAll("section[data-dock]");
+  const middle = new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue;
+        docked = e.target.dataset.dock;
+        dock.classList.toggle("mini", docked === "mini");
+        if (e.target.dataset.part) robot.dataset.focus = e.target.dataset.part;
+        else delete robot.dataset.focus;
+        place();
+      }
+    },
+    { rootMargin: "-50% 0px -50% 0px" },
+  );
+  screens.forEach((s) => middle.observe(s));
+
+  // Walks left and right in a small area, turning to face where it goes.
+  const walk = { x: 0, target: 0, angle: 0, last: 0, frame: 0 };
+  function pickTarget() {
+    const r = size.range;
+    let t;
+    do t = (Math.random() * 2 - 1) * r;
+    while (Math.abs(t - walk.x) < r * 0.4);
+    walk.target = t;
+  }
+  function step(now) {
+    const dt = walk.last ? Math.min(now - walk.last, 100) / 1000 : 0;
+    walk.last = now;
+    const facing = Math.sign(walk.target - walk.x);
+    const goal = facing * 28;
+    // Turn first, then walk; speed ramps up as it finishes turning.
+    walk.angle += Math.sign(goal - walk.angle) * Math.min(Math.abs(goal - walk.angle), 140 * dt);
+    const ready = Math.max(0, 1 - Math.abs(goal - walk.angle) / 40);
+    const speed = size.rw * 0.22 * ready;
+    walk.x += facing * Math.min(Math.abs(walk.target - walk.x), speed * dt);
+    if (Math.abs(walk.target - walk.x) < 0.5) pickTarget();
+    walker.style.transform = `translateX(${walk.x.toFixed(2)}px) rotateY(${walk.angle.toFixed(2)}deg)`;
+    walk.frame = requestAnimationFrame(step);
+  }
+  function startWalking() {
+    document.body.classList.add("assembled");
+    if (reduced) return;
+    robot.classList.add("walking");
+    pickTarget();
+    walk.last = 0;
+    walk.frame = requestAnimationFrame(step);
+  }
+  function stopWalking() {
+    cancelAnimationFrame(walk.frame);
+    robot.classList.remove("walking");
+    Object.assign(walk, { x: 0, angle: 0 });
+    walker.style.transform = "";
+  }
+
+  let print;
+  function printRobot() {
+    stopWalking();
+    document.body.classList.remove("assembled");
+    print?.destroy();
+    print = pixelPrint(robot, { start: "now", depth: "3d", spread: 0.22, onDone: startWalking });
+  }
+  printRobot();
+  document.getElementById("again").addEventListener("click", () => {
+    scrollTo({ top: 0, behavior: reduced ? "auto" : "smooth" });
+    printRobot();
+  });
+</script>
+</body>
+</html>
