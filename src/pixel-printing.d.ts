@@ -5,7 +5,8 @@
  */
 export type Part = { x: number; y: number; w: number; h: number; dx?: number; dy?: number };
 
-export type Effect = "scan" | "dust" | "layers";
+export type Effect = "scan" | "layers" | "dust" | "random" | "noise" | "radial";
+export type Direction = "down" | "up" | "right" | "left";
 
 export type Target =
   | Element
@@ -22,11 +23,19 @@ export type Target =
 
 export type Options = {
   /**
-   * "scan" (default): a print head sweeps down and pixels land along a ragged edge.
-   * "dust": pixels rain in cell by cell (images only; elements use "scan").
-   * "layers": the part builds up from the bottom, layer by layer.
+   * Print heads, which sweep across the part in `direction`:
+   * - "scan" (default): pixels land along a ragged edge.
+   * - "layers": a flat edge builds up layer by layer, like an FDM printer.
+   *
+   * Pixel patterns, which fill the part cell by cell:
+   * - "dust": cells rain in, denser toward `direction`.
+   * - "random": every cell lands in random order, like static.
+   * - "noise": cells grow in organic blobs from a smooth noise field.
+   * - "radial": cells grow from the centre outward.
    */
   effect?: Effect;
+  /** Where "scan", "layers" and "dust" print toward. Default "down", or "up" for "layers". */
+  direction?: Direction;
   /** "3d" tilts the parts in 3D, with thickness on images, and swings them flat as they land. Default "2d". */
   depth?: "2d" | "3d";
   /** How far parts start from their place, as a fraction of the object's smaller side. Default 0.3. */
@@ -52,6 +61,7 @@ export type PixelPrint = {
 };
 
 export const EFFECTS: Effect[];
+export const DIRECTIONS: Direction[];
 export function pixelPrint(targets: Target | Target[], options?: Options): PixelPrint;
 export function pixelPrintAll(selector?: string, options?: Options): PixelPrint[];
 export function parseParts(text: string): Part[];

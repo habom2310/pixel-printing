@@ -1,7 +1,10 @@
 // pixel-printing: the parts of an image or element print in apart, then assemble into the whole.
 // Dependency-free ES module. MIT licensed. See README.md and skills/pixel-printing/SKILL.md.
 
-export const EFFECTS = ["scan", "dust", "layers"];
+export const EFFECTS = ["scan", "layers", "dust", "random", "noise", "radial"];
+export const DIRECTIONS = ["down", "up", "right", "left"];
+/** Effects with a moving print head; the others print cell by cell in a pattern. */
+const SWEEPS = new Set(["scan", "layers"]);
 
 /** Three columns by two rows: a fallback for when an image has no parts. */
 export function autoParts() {
@@ -122,36 +125,140 @@ function moveTransform(p, k, depth) {
   return `perspective(1000px) translate3d(${x}, ${y}, ${px(70 * k)}) rotateX(${40 * k}deg) rotateZ(${10 * side * k}deg)`;
 }
 
-/** Printed height of each column of pixels. */
-function heights(p, pt, effect) {
+/** Sweeps work in (u, v): v runs from the edge printing starts at, u along that edge. */
+function axes(p, dir) {
+  const vertical = dir === "down" || dir === "up";
+  return { along: vertical ? p.h : p.w, across: vertical ? p.w : p.h };
+}
+function toXY(p, dir, u, v) {
+  if (dir === "up") return [u, p.h - v];
+  if (dir === "right") return [v, u];
+  if (dir === "left") return [p.w - v, u];
+  return [u, v];
+}
+/** A (u, v) rectangle as x, y, width, height. */
+function rectXY(p, dir, [u0, v0, u1, v1]) {
+  const [ax, ay] = toXY(p, dir, u0, v0);
+  const [bx, by] = toXY(p, dir, u1, v1);
+  return [Math.min(ax, bx), Math.min(ay, by), Math.abs(bx - ax), Math.abs(by - ay)];
+}
+
+/** How far each lane of pixels has printed. Scan has a ragged edge; layers a flat one. */
+function sweep(p, pt, effect, dir) {
+  const { along } = axes(p, dir);
   if (effect === "layers") {
     const layer = CELL * 2;
-    const filled = pt >= 1 ? p.h : Math.floor((pt * p.h) / layer) * layer;
+    const filled = pt >= 1 ? along : Math.floor((pt * along) / layer) * layer;
     return p.jit.map(() => filled);
   }
-  const reach = pt * (p.h + 4 * CELL);
-  return p.jit.map((j) => Math.min(p.h, Math.max(0, Math.floor((reach - j * CELL) / CELL) * CELL)));
+  const reach = pt * (along + 4 * CELL);
+  return p.jit.map((j) => Math.min(along, Math.max(0, Math.floor((reach - j * CELL) / CELL) * CELL)));
 }
 
-function clipFor(p, pt, hs, effect) {
+function sweepClip(p, filled, dir) {
+  const { along, across } = axes(p, dir);
+  const last = filled.length - 1;
+  const uv = [
+    [-BLEED, -BLEED],
+    [across + BLEED, -BLEED],
+  ];
+  for (let c = last; c >= 0; c--) {
+    const v = filled[c] >= along ? along + BLEED : filled[c];
+    uv.push([c === last ? across + BLEED : (c + 1) * CELL, v], [c === 0 ? -BLEED : c * CELL, v]);
+  }
+  return `polygon(${uv.map(([u, v]) => toXY(p, dir, u, v).map(px).join(" ")).join(", ")})`;
+}
+
+/** Smooth 2D value noise in 0..1, two octaves, seeded. */
+function valueNoise(seed) {
+  const hash = (x, y) => {
+    let h = Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(seed, 1013904223);
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+  };
+  const smooth = (t) => t * t * (3 - 2 * t);
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const octave = (x, y) => {
+    const xi = Math.floor(x);
+    const yi = Math.floor(y);
+    const xf = smooth(x - xi);
+    const yf = smooth(y - yi);
+    return lerp(lerp(hash(xi, yi), hash(xi + 1, yi), xf), lerp(hash(xi, yi + 1), hash(xi + 1, yi + 1), xf), yf);
+  };
+  return (x, y) => octave(x, y) * 0.7 + octave(x * 2.3 + 17, y * 2.3 + 31) * 0.3;
+}
+
+/** When cell (x, y) of a cols by rows grid prints, as a sort key; lower prints first. */
+function cellOrder(effect, dir, cols, rows, seed) {
+  const rnd = random(seed);
+  if (effect === "random") return () => rnd();
+  if (effect === "noise") {
+    const noise = valueNoise(seed);
+    const blob = Math.max(3, Math.max(cols, rows) / 5); // about five blobs across
+    return (x, y) => noise(x / blob, y / blob) * 0.85 + rnd() * 0.15;
+  }
+  if (effect === "radial") return (x, y) => Math.hypot((x + 0.5) / cols - 0.5, (y + 0.5) / rows - 0.5) + rnd() * 0.3;
+  // Dust: denser toward the direction it prints in.
+  const along = {
+    down: (x, y) => y / rows,
+    up: (x, y) => 1 - y / rows,
+    right: (x) => x / cols,
+    left: (x) => 1 - x / cols,
+  }[dir];
+  return (x, y) => along(x, y) * 0.55 + rnd() * 0.45;
+}
+
+/** Every pixel cell of a part, sorted by when it prints. */
+function buildCells(p, effect, dir, cell) {
+  const cols = Math.max(1, Math.ceil(p.w / cell));
+  const rows = Math.max(1, Math.ceil(p.h / cell));
+  const order = cellOrder(effect, dir, cols, rows, p.i * 97 + 3);
+  const cells = [];
+  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) cells.push({ x, y, k: order(x, y) });
+  cells.sort((a, b) => a.k - b.k);
+  Object.assign(p, { cells, cols, rows, cell, n: 0, clipN: -1, drawn: 0 });
+}
+
+const printedCells = (p, pt) => (pt >= 1 ? p.cells.length : Math.floor(easeInOut(pt) * p.cells.length));
+
+/** The printed cells as one clip-path: a rectangle per run of cells in a row, joined at the corner. */
+function cellsClip(p) {
+  if (p.clipN === p.n) return p.clipText;
+  const { cols, rows, cell, cells, n } = p;
+  const grid = new Uint8Array(cols * rows);
+  for (let c = 0; c < n; c++) grid[cells[c].y * cols + cells[c].x] = 1;
+  const pts = ["0 0"];
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; ) {
+      if (!grid[y * cols + x]) {
+        x++;
+        continue;
+      }
+      let e = x;
+      while (e < cols && grid[y * cols + e]) e++;
+      const [x0, x1, y0, y1] = [x * cell, Math.min(p.w, e * cell), y * cell, Math.min(p.h, (y + 1) * cell)].map(px);
+      pts.push(`${x0} ${y0}`, `${x1} ${y0}`, `${x1} ${y1}`, `${x0} ${y1}`, `${x0} ${y0}`, "0 0");
+      x = e;
+    }
+  }
+  p.clipN = n;
+  p.clipText = `polygon(${pts.join(", ")})`;
+  return p.clipText;
+}
+
+/** The clip for a part at print progress pt, or null once it is fully printed. */
+function printClip(p, pt, filled, o) {
   if (pt <= 0) return HIDDEN;
   if (pt >= 1) return null;
-  if (effect === "layers") return `inset(${px(p.h - hs[0])} -${BLEED}px -${BLEED}px -${BLEED}px)`;
-  const last = hs.length - 1;
-  const pts = [`-${BLEED}px -${BLEED}px`, `${px(p.w + BLEED)} -${BLEED}px`];
-  for (let c = last; c >= 0; c--) {
-    const y = hs[c] >= p.h ? px(p.h + BLEED) : px(hs[c]);
-    pts.push(`${c === last ? px(p.w + BLEED) : px((c + 1) * CELL)} ${y}`, `${c === 0 ? `-${BLEED}px` : px(c * CELL)} ${y}`);
-  }
-  return `polygon(${pts.join(", ")})`;
+  return SWEEPS.has(o.effect) ? sweepClip(p, filled, o.direction) : cellsClip(p);
 }
 
-/** Sizes a part's effect canvas and resets its pixel columns after a resize. */
-function sizePart(p, dpr) {
-  const cols = Math.max(1, Math.ceil(p.w / CELL));
-  if (p.jit?.length !== cols) {
+/** Sizes a part's canvases and rebuilds its pixel lanes or cells after a resize. */
+function sizePart(p, dpr, o) {
+  const lanes = Math.max(1, Math.ceil(axes(p, o.direction).across / CELL));
+  if (p.jit?.length !== lanes) {
     const rnd = random(p.i * 31 + 7);
-    p.jit = Array.from({ length: cols }, () => Math.floor(rnd() * 4));
+    p.jit = Array.from({ length: lanes }, () => Math.floor(rnd() * 4));
   }
   const width = Math.ceil((p.w + 2 * FX) * dpr);
   const height = Math.ceil((p.h + 2 * FX) * dpr);
@@ -160,24 +267,25 @@ function sizePart(p, dpr) {
     Object.assign(p.fx.style, { width: px(p.w + 2 * FX), height: px(p.h + 2 * FX) });
     p.fxClear = false;
   }
-  if (p.dust) {
+  if (SWEEPS.has(o.effect)) return;
+  // Canvas cells can be fine; clip-path cells are coarser to keep the path short.
+  if (p.sizedW !== p.w || p.sizedH !== p.h) {
+    p.sizedW = p.w;
+    p.sizedH = p.h;
+    buildCells(p, o.effect, o.direction, p.paint ? CELL : CELL * 2);
+  }
+  if (p.paint) {
     const w = Math.ceil(p.w * dpr);
     const h = Math.ceil(p.h * dpr);
-    if (p.dust.canvas.width !== w || p.dust.canvas.height !== h) {
-      Object.assign(p.dust.canvas, { width: w, height: h });
-      const rnd = random(p.i * 97 + 3);
-      const rows = Math.ceil(p.h / CELL);
-      p.dust.cells = [];
-      for (let y = 0; y < rows; y++)
-        for (let x = 0; x < cols; x++) p.dust.cells.push({ x, y, k: (y / rows) * 0.55 + rnd() * 0.45 });
-      p.dust.cells.sort((a, b) => a.k - b.k);
-      p.dust.drawn = 0;
+    if (p.paint.canvas.width !== w || p.paint.canvas.height !== h) {
+      Object.assign(p.paint.canvas, { width: w, height: h });
+      p.drawn = 0;
     }
   }
 }
 
 /** Draws the outline, print head, fresh pixels and landing flash. Needs a 2D canvas; skipped without one. */
-function paintFx(p, s, hs, effect, color, dpr, t) {
+function paintFx(p, s, filled, o, dpr, t) {
   const ctx = p.ctx;
   if (!ctx) return;
   const head = s.pt > 0 && s.pt < 1;
@@ -188,6 +296,7 @@ function paintFx(p, s, hs, effect, color, dpr, t) {
   }
   p.fxClear = false;
   const { w, h } = p;
+  const { color, direction: dir } = o;
   ctx.setTransform(dpr, 0, 0, dpr, FX * dpr, FX * dpr);
   ctx.clearRect(-FX, -FX, w + 2 * FX, h + 2 * FX);
   ctx.fillStyle = ctx.strokeStyle = ctx.shadowColor = color;
@@ -199,33 +308,35 @@ function paintFx(p, s, hs, effect, color, dpr, t) {
     ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
     ctx.setLineDash([]);
   }
-  if (head && p.dust) {
-    const { cells } = p.dust;
+  if (head && !SWEEPS.has(o.effect)) {
+    // The newest cells glow, fading as more land.
+    const { cells, cell, n } = p;
     const fresh = Math.max(1, Math.floor(cells.length * 0.08));
-    for (let c = Math.max(0, p.dust.drawn - fresh); c < p.dust.drawn; c++) {
-      ctx.globalAlpha = 1 - (p.dust.drawn - c) / fresh;
-      ctx.fillRect(cells[c].x * CELL, cells[c].y * CELL, CELL - 1, CELL - 1);
+    for (let c = Math.max(0, n - fresh); c < n; c++) {
+      ctx.globalAlpha = 1 - (n - c) / fresh;
+      ctx.fillRect(cells[c].x * cell, cells[c].y * cell, cell - 1, cell - 1);
     }
   } else if (head) {
-    const fromBottom = effect === "layers";
-    const hy = fromBottom ? h - hs[0] : Math.min(h, s.pt * (h + 4 * CELL));
-    // The head: a bright bar with a glow.
+    const { along, across } = axes(p, dir);
+    const hv = o.effect === "layers" ? filled[0] : Math.min(along, s.pt * (along + 4 * CELL));
+    // The head: a bright bar with a glow, across the part.
     ctx.globalAlpha = 0.95;
     ctx.shadowBlur = 12;
-    ctx.fillRect(-4, hy - 1, w + 8, 2);
+    ctx.fillRect(...rectXY(p, dir, [-4, hv - 1, across + 4, hv + 1]));
     ctx.shadowBlur = 0;
     ctx.globalAlpha = 0.9;
     ctx.fillStyle = "#fff";
-    ctx.fillRect(-2, hy - 0.5, w + 4, 1);
+    ctx.fillRect(...rectXY(p, dir, [-2, hv - 0.5, across + 2, hv + 0.5]));
     ctx.fillStyle = color;
     // Pixels it just laid down, flickering along the edge.
     const rnd = random(Math.floor(t * 30) * 7 + p.i);
-    hs.forEach((filled, c) => {
-      const y = fromBottom ? h - filled : filled - CELL;
-      if (y < 0 || y >= h || rnd() < 0.35) return;
+    filled.forEach((f, c) => {
+      const v = f - CELL;
+      if (v < 0 || v >= along || rnd() < 0.35) return;
       ctx.globalAlpha = 0.4 + rnd() * 0.6;
-      ctx.fillRect(c * CELL, y, CELL - 1, CELL - 1);
-      if (!fromBottom && y >= CELL && rnd() < 0.3) ctx.fillRect(c * CELL, y - CELL, CELL - 1, CELL - 1);
+      ctx.fillRect(...rectXY(p, dir, [c * CELL, v, c * CELL + CELL - 1, v + CELL - 1]));
+      if (o.effect === "scan" && v >= CELL && rnd() < 0.3)
+        ctx.fillRect(...rectXY(p, dir, [c * CELL, v - CELL, c * CELL + CELL - 1, v - 1]));
     });
   }
   if (s.flash) {
@@ -238,29 +349,28 @@ function paintFx(p, s, hs, effect, color, dpr, t) {
   ctx.globalAlpha = 1;
 }
 
-/** Copies the newly printed cells of a dust part from the source image. */
-function paintDust(p, pt, image, dpr) {
-  const { dust } = p;
-  const { cells, ctx } = dust;
-  const n = Math.floor(easeInOut(pt) * cells.length);
-  if (n === dust.drawn) return;
-  if (n < dust.drawn) {
-    ctx.clearRect(0, 0, dust.canvas.width, dust.canvas.height);
-    dust.drawn = 0;
+/** Copies the newly printed cells of a part from the decoded source image onto its canvas. */
+function paintCells(p, image, dpr) {
+  const { ctx, canvas } = p.paint;
+  const { cells, cell, n } = p;
+  if (n === p.drawn) return;
+  if (n < p.drawn) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    p.drawn = 0;
   }
   const sx = (p.r.x / 100) * image.naturalWidth;
   const sy = (p.r.y / 100) * image.naturalHeight;
   const fx = ((p.r.w / 100) * image.naturalWidth) / p.w;
   const fy = ((p.r.h / 100) * image.naturalHeight) / p.h;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  for (let c = dust.drawn; c < n; c++) {
-    const x = cells[c].x * CELL;
-    const y = cells[c].y * CELL;
-    const cw = Math.min(CELL, p.w - x);
-    const ch = Math.min(CELL, p.h - y);
+  for (let c = p.drawn; c < n; c++) {
+    const x = cells[c].x * cell;
+    const y = cells[c].y * cell;
+    const cw = Math.min(cell, p.w - x);
+    const ch = Math.min(cell, p.h - y);
     if (cw > 0 && ch > 0) ctx.drawImage(image, sx + x * fx, sy + y * fy, cw * fx, ch * fy, x, y, cw, ch);
   }
-  dust.drawn = n;
+  p.drawn = n;
 }
 
 const SVG = "http://www.w3.org/2000/svg";
@@ -331,9 +441,10 @@ function imageJob(node, regions, src, o) {
   const tl = timeline(regions.length);
   const job = { node, t: 0, end: tl.end };
   let image = null;
-  let effect = o.effect;
+  // Pixel patterns copy cells from the decoded image onto a canvas.
+  const cellsMode = !SWEEPS.has(o.effect);
   job.ready =
-    effect === "dust"
+    cellsMode
       ? new Promise((resolve) => {
           const img = new Image();
           img.src = src;
@@ -377,7 +488,7 @@ function imageJob(node, regions, src, o) {
       const cx = ((p.r.x + p.r.w / 2 - 50) / 100) * w;
       const cy = ((p.r.y + p.r.h / 2 - 50) / 100) * h;
       Object.assign(p, offsetFor(cx, cy, w, h, o.spread, p.r.dx === undefined ? null : p.r));
-      sizePart(p, dpr);
+      sizePart(p, dpr, o);
     });
   };
 
@@ -412,13 +523,13 @@ function imageJob(node, regions, src, o) {
         o.depth === "3d"
           ? [3, 2, 1].map((k) => tile(src, r, { transform: `translateZ(-${k * 3}px)`, filter: `brightness(${0.62 - k * 0.1})` }, p.group))
           : [];
-      if (effect === "dust") {
+      if (cellsMode) {
         const canvas = el("canvas", { position: "absolute", inset: "0", width: "100%", height: "100%" }, p.group);
         const ctx = context(canvas);
-        if (ctx) p.dust = { canvas, ctx, cells: [], drawn: 0 };
+        if (ctx) p.paint = { canvas, ctx };
         else canvas.remove();
       }
-      p.tile = p.dust ? p.dust.canvas : tile(src, r, {}, p.group);
+      p.tile = p.paint ? p.paint.canvas : tile(src, r, {}, p.group);
       p.fx = el("canvas", { position: "absolute", left: `-${FX}px`, top: `-${FX}px` }, p.group);
       p.ctx = context(p.fx);
     });
@@ -446,15 +557,16 @@ function imageJob(node, regions, src, o) {
 
   job.render = (t) => {
     if (place() === true) return;
-    // Dust needs the decoded image; without it, it prints like scan.
-    if (effect === "dust" && !image && job.started) {
-      effect = "scan";
+    // Without the decoded image, pattern cells print through a clip-path instead of the canvas.
+    if (cellsMode && !image && job.started && parts.some((p) => p.paint)) {
+      const dpr = dprNow();
       parts.forEach((p) => {
-        if (!p.dust) return;
-        p.dust.canvas.remove();
-        p.dust = null;
+        p.paint?.canvas.remove();
+        p.paint = null;
         p.tile = tile(src, p.r, {}, null);
         p.group.insertBefore(p.tile, p.fx);
+        p.sizedW = -1;
+        sizePart(p, dpr, o);
       });
     }
     const dpr = dprNow();
@@ -462,20 +574,22 @@ function imageJob(node, regions, src, o) {
       const s = partState(p.i, t, tl);
       p.group.style.visibility = s.shown ? "" : "hidden";
       p.group.style.transform = moveTransform(p, s.k, o.depth) ?? "";
-      const hs = heights(p, s.pt, effect);
-      if (p.dust) {
-        if (image) paintDust(p, s.pt, image, dpr);
-        const clip = s.pt >= 1 ? p.rest : `inset(0 0 ${px((1 - s.pt) * p.h)} 0)`;
-        p.copies.forEach((c) => (c.style.clipPath = clip));
+      const filled = cellsMode ? null : sweep(p, s.pt, o.effect, o.direction);
+      if (cellsMode) p.n = printedCells(p, s.pt);
+      let backs = s.k;
+      if (p.paint) {
+        if (image) paintCells(p, image, dpr);
         p.tile.style.clipPath = p.rest;
+        p.copies.forEach((c) => (c.style.clipPath = p.rest));
+        backs *= p.n / p.cells.length;
       } else {
-        const clip = clipFor(p, s.pt, hs, effect) ?? p.rest;
+        const clip = printClip(p, s.pt, filled, o) ?? p.rest;
         p.tile.style.clipPath = clip;
         p.copies.forEach((c) => (c.style.clipPath = clip));
       }
-      p.copies.forEach((c) => (c.style.opacity = String(s.k)));
+      p.copies.forEach((c) => (c.style.opacity = String(backs)));
       p.tile.style.filter = p.tint(s.tint, "");
-      paintFx(p, s, hs, effect, o.color, dpr, t);
+      paintFx(p, s, filled, o, dpr, t);
     });
     // Whatever no part covers fades in once everything has landed.
     final.style.opacity = String(clamp01((t - tl.landed) / 0.4));
@@ -486,7 +600,6 @@ function imageJob(node, regions, src, o) {
 /** One element whose part elements print, then assemble, live in the page. */
 function elementJob(container, nodes, o) {
   const tl = timeline(nodes.length);
-  const effect = o.effect === "dust" ? "scan" : o.effect; // dust copies pixels from an image
   const job = { node: container, t: 0, end: tl.end, ready: Promise.resolve() };
   const parts = nodes.map((node, i) => {
     const given = node.dataset.printPart ? parseParts(`0 0 0 0 ${node.dataset.printPart}`)[0] : null;
@@ -509,7 +622,7 @@ function elementJob(container, nodes, o) {
       const cx = r.left + r.width / 2 - (c.left + c.width / 2);
       const cy = r.top + r.height / 2 - (c.top + c.height / 2);
       Object.assign(p, offsetFor(cx, cy, c.width, c.height, o.spread, p.given));
-      sizePart(p, dpr);
+      sizePart(p, dpr, o);
       Object.assign(p.fx.style, { left: px(p.x - FX), top: px(p.y - FX) });
     });
     if (last >= 0) job.render(last);
@@ -562,13 +675,14 @@ function elementJob(container, nodes, o) {
       const move = moveTransform(p, s.k, o.depth);
       p.node.style.transform = move ? `${move} ${p.base.transform}` : p.rest.transform;
       p.fx.style.transform = move ?? "";
-      const hs = heights(p, s.pt, effect);
-      p.node.style.clipPath = clipFor(p, s.pt, hs, effect) ?? p.rest.clipPath;
+      const filled = SWEEPS.has(o.effect) ? sweep(p, s.pt, o.effect, o.direction) : null;
+      if (!filled) p.n = printedCells(p, s.pt);
+      p.node.style.clipPath = printClip(p, s.pt, filled, o) ?? p.rest.clipPath;
       p.node.style.filter = s.tint > 0.005 ? p.tint(s.tint, p.base.filter) : p.rest.filter;
       // Focusable again once it starts to print, unless another print still hides it.
       const inert = s.pt <= 0;
       if (p.node.inert !== inert && (inert || (held.get(p.node)?.count ?? 0) <= 1)) p.node.inert = inert;
-      paintFx(p, s, hs, effect, o.color, dpr, t);
+      paintFx(p, s, filled, o, dpr, t);
     });
   };
   return job;
@@ -723,6 +837,7 @@ function normalize(targets, o) {
 export function pixelPrint(targets, options = {}) {
   const o = {
     effect: EFFECTS.includes(options.effect) ? options.effect : "scan",
+    direction: DIRECTIONS.includes(options.direction) ? options.direction : options.effect === "layers" ? "up" : "down",
     depth: options.depth === "3d" ? "3d" : "2d",
     spread: Number.isFinite(options.spread) && options.spread >= 0 ? options.spread : 0.3,
     color: options.color || "#5eead4",

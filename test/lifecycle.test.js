@@ -378,3 +378,62 @@ test("an array of targets waits for each to scroll into view", async () => {
   assert.equal(calls, 1);
   assert.equal(leftovers(), 0);
 });
+
+const { EFFECTS, DIRECTIONS } = await import("../src/pixel-printing.js");
+
+/** A widget whose parts have a real size, since jsdom has no layout. */
+function sizedWidget() {
+  const { container, parts } = widget();
+  container.getBoundingClientRect = () => ({ left: 0, top: 0, width: 200, height: 160, right: 200, bottom: 160 });
+  parts.forEach((p, i) => {
+    p.getBoundingClientRect = () => ({ left: 10, top: 10 + i * 50, width: 80, height: 40, right: 90, bottom: 50 + i * 50 });
+  });
+  return { container, parts };
+}
+
+test("every effect and direction completes and restores, in both modes", async () => {
+  for (const effect of EFFECTS)
+    for (const direction of DIRECTIONS) {
+      const img = image();
+      const { container, parts } = sizedWidget();
+      document.body.appendChild(img);
+      const print = pixelPrint([img, container], { start: "now", speed: 40, effect, direction, depth: "3d" });
+      await print.finished;
+      assert.equal(leftovers(), 0, `${effect} ${direction}`);
+      assert.equal(parts[2].style.clipPath, "", `${effect} ${direction}`);
+      assert.equal(img.style.opacity, "", `${effect} ${direction}`);
+    }
+});
+
+test("pattern effects print live elements cell by cell through a clip-path", async () => {
+  const { container, parts } = sizedWidget();
+  const print = pixelPrint(container, { start: "now", speed: 0.6, effect: "noise" });
+  let clip = "";
+  for (let i = 0; i < 200 && !clip.startsWith("polygon(0 0,"); i++) {
+    await wait(10);
+    clip = parts[0].style.clipPath;
+  }
+  assert.match(clip, /^polygon\(0 0, [\d.]+px [\d.]+px/, "a run of printed cells");
+  print.destroy();
+  await print.finished;
+});
+
+test("scan follows the direction", async () => {
+  const clipAt = async (direction) => {
+    const { container, parts } = sizedWidget();
+    const print = pixelPrint(container, { start: "now", speed: 0.6, direction });
+    let clip = "";
+    for (let i = 0; i < 200 && !clip.startsWith("polygon"); i++) {
+      await wait(10);
+      clip = parts[0].style.clipPath;
+    }
+    print.destroy();
+    await print.finished;
+    return clip.match(/^polygon\(([^,]+), ([^,]+),/).slice(1);
+  };
+  // The first two points are the corners of the edge printing starts from.
+  assert.deepEqual(await clipAt("down"), ["-40px -40px", "120px -40px"]);
+  assert.deepEqual(await clipAt("right"), ["-40px -40px", "-40px 80px"]);
+  assert.deepEqual(await clipAt("left"), ["120px -40px", "120px 80px"]);
+  assert.deepEqual(await clipAt("up"), ["-40px 80px", "120px 80px"]);
+});

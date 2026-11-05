@@ -1,6 +1,6 @@
 ---
 name: pixel-printing
-description: Add the pixel-printing animation to a website, where an image or a group of page elements is split into parts, each part prints in a little apart from the others under a glowing print head (scanline, pixel dust or layer by layer, in 2D or 3D), and then the parts fly together and assemble into the whole object. Use when the user wants something to look "printed", "fabricated", "3D printed", "assembled from parts" or built by future technology, wants a hero image or product shot to build itself from components, or names pixel-printing. Works with plain HTML and any framework (React, Next.js, Vue, Svelte, Astro).
+description: Add the pixel-printing animation to a website, where an image or a group of page elements is split into parts, each part prints in a little apart from the others under a glowing print head (a scanline or layer-by-layer head sweeping in any direction, or pixels landing as dust, random static, noise blobs or from the centre out, in 2D or 3D), and then the parts fly together and assemble into the whole object. Use when the user wants something to look "printed", "fabricated", "3D printed", "assembled from parts" or built by future technology, wants a hero image or product shot to build itself from components, or names pixel-printing. Works with plain HTML and any framework (React, Next.js, Vue, Svelte, Astro).
 ---
 
 # pixel-printing
@@ -27,11 +27,19 @@ Ask the user if they have not said, or pick from the page's tone:
 
 | Option | Values | Look |
 | --- | --- | --- |
-| `effect` | `"scan"` (default) | A print head sweeps down; pixels land along a ragged edge. Works in both modes. |
-| | `"dust"` | Glowing pixels rain in cell by cell. Image mode only; element mode uses `"scan"`. |
-| | `"layers"` | The part builds up from the bottom in flat layers, like an FDM printer. |
+| `effect` | `"scan"` (default) | A print head sweeps across; pixels land along a ragged edge. |
+| | `"layers"` | A flat edge builds the part up layer by layer, like an FDM printer. |
+| | `"dust"` | Glowing pixels rain in, denser toward `direction`. |
+| | `"random"` | Every pixel lands in random order, like static resolving. |
+| | `"noise"` | Pixels grow in organic blobs, like material condensing. |
+| | `"radial"` | Pixels grow from the part's centre outward. |
+| `direction` | `"down"`, `"up"`, `"right"`, `"left"` | Where `scan`, `layers` and `dust` print toward. Default `"down"`, or `"up"` for `layers`. |
 | `depth` | `"2d"` (default), `"3d"` | `"3d"` tilts parts toward the viewer while they print and swings them flat as they land. Image parts also get visible thickness. |
-| `color` | any hex or `rgb()` | Head, outline and tint colour. Default `#5eead4`. Match the brand accent. |
+| `color` | hex or `rgb()` | Head, outline and tint colour. Default `#5eead4`. Match the brand accent. |
+
+All effects work in both modes.
+On images, pattern effects copy pixels from the decoded image onto a canvas (4px cells).
+On live elements they use a `clip-path` of 8px cells.
 
 ## 3a. Image mode: choose the parts
 
@@ -100,7 +108,8 @@ Several targets can share one call: `pixelPrint([img, cardGrid])`. Each starts o
 
 | Option | Default | Use |
 | --- | --- | --- |
-| `effect` | `"scan"` | `"scan"`, `"dust"` or `"layers"` |
+| `effect` | `"scan"` | `"scan"`, `"layers"`, `"dust"`, `"random"`, `"noise"` or `"radial"` |
+| `direction` | `"down"` (`"up"` for layers) | `"down"`, `"up"`, `"right"` or `"left"` |
 | `depth` | `"2d"` | `"3d"` for tilt and thickness |
 | `spread` | `0.3` | How far parts start from their place, as a fraction of the object's smaller side. Use 0.15 to 0.2 for wide objects. |
 | `color` | `"#5eead4"` | Print head, outline and tint colour |

@@ -61,7 +61,9 @@
   .seg button { font: 500 13px/1 system-ui, sans-serif; color: var(--muted); background: none; border: 0; border-radius: 6px;
     padding: 8px 12px; cursor: pointer; }
   .seg button[aria-pressed="true"] { background: var(--raised); color: var(--ink); box-shadow: inset 0 0 0 1px #24384a; }
-  .seg button:hover { color: var(--ink); }
+  .seg button:hover:not(:disabled) { color: var(--ink); }
+  .seg button:disabled { opacity: 0.35; cursor: default; }
+  .seg.arrows button { font-size: 15px; width: 36px; padding-inline: 0; }
   .actions { margin-left: auto; display: flex; gap: 8px; }
   .btn { font: 600 13px/1 system-ui, sans-serif; border-radius: 9px; padding: 10px 14px; cursor: pointer; border: 1px solid var(--line);
     background: var(--panel); color: var(--ink); }
@@ -112,7 +114,10 @@
     .group.speed { display: none; }
     .actions { margin-left: 0; width: 100%; }
     .actions .btn { flex: 1; }
-    .seg button { padding: 8px 10px; }
+    .seg button { padding: 8px 6px; font-size: 12px; }
+    .group:first-child, .group:first-child .seg { width: 100%; }
+    .group:first-child .seg button { flex: 1; }
+    .seg.arrows button { width: 34px; }
     .widget-bed { padding: 44px 16px 20px; }
     .shot-bed { padding: 48px 24px 32px; }
     .w-stats strong { font-size: 17px; }
@@ -149,8 +154,19 @@ pixelPrint(img, { effect: "scan", depth: "3d" });</code></pre>
       <div class="group"><span>Effect</span>
         <div class="seg" data-key="effect" role="group" aria-label="Effect">
           <button type="button" data-value="scan" aria-pressed="true">Scan</button>
-          <button type="button" data-value="dust" aria-pressed="false">Dust</button>
           <button type="button" data-value="layers" aria-pressed="false">Layers</button>
+          <button type="button" data-value="dust" aria-pressed="false">Dust</button>
+          <button type="button" data-value="random" aria-pressed="false">Random</button>
+          <button type="button" data-value="noise" aria-pressed="false">Noise</button>
+          <button type="button" data-value="radial" aria-pressed="false">Radial</button>
+        </div>
+      </div>
+      <div class="group" id="direction-group"><span>Direction</span>
+        <div class="seg arrows" data-key="direction" role="group" aria-label="Direction">
+          <button type="button" data-value="down" aria-pressed="true" aria-label="Down">↓</button>
+          <button type="button" data-value="up" aria-pressed="false" aria-label="Up">↑</button>
+          <button type="button" data-value="right" aria-pressed="false" aria-label="Right">→</button>
+          <button type="button" data-value="left" aria-pressed="false" aria-label="Left">←</button>
         </div>
       </div>
       <div class="group"><span>Depth</span>
@@ -174,7 +190,7 @@ pixelPrint(img, { effect: "scan", depth: "3d" });</code></pre>
     <div class="wrap">
       <div class="eyebrow">Live elements</div>
       <h2>Real DOM, printed in place</h2>
-      <p>Mark blocks with <code>data-print-part</code> and print their container. Nothing is copied: the live elements move, so text stays selectable once they land. Dust needs pixels, so elements use Scan instead.</p>
+      <p>Mark blocks with <code>data-print-part</code> and print their container. Nothing is copied: the live elements move, so text stays selectable once they land. Every effect works here too.</p>
       <div class="bed widget-bed">
         <div class="bed-label">Bay 02 <span>/ live elements</span></div>
         <div class="widget" id="widget">
@@ -213,7 +229,8 @@ pixelPrint(img, { effect: "scan", depth: "3d" });</code></pre>
       <div class="eyebrow">API</div>
       <h2>One call per object</h2>
       <pre><code><b>const</b> print = pixelPrint(target, {
-  effect: "scan",   <span>// "scan" | "dust" | "layers"</span>
+  effect: "scan",   <span>// "scan" | "layers" | "dust" | "random" | "noise" | "radial"</span>
+  direction: "down", <span>// "down" | "up" | "right" | "left"</span>
   depth: "2d",      <span>// "2d" | "3d"</span>
   spread: 0.3,      <span>// how far apart parts start</span>
   color: "#5eead4", <span>// print head and tint</span>
@@ -228,7 +245,19 @@ pixelPrint(img, { effect: "scan", depth: "3d" });</code></pre>
 <script type="module">
   import { pixelPrint } from "../src/pixel-printing.js";
 
-  const settings = { effect: "scan", depth: "2d", speed: 1 };
+  const settings = { effect: "scan", direction: "down", depth: "2d", speed: 1 };
+  const DIRECTED = ["scan", "layers", "dust"];
+  let directionPicked = false;
+  const press = (seg, value) =>
+    seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.value === value)));
+  const directionSeg = document.querySelector('[data-key="direction"]');
+  // Patterns without a direction grey the arrows out; layers default to building up.
+  function syncDirection() {
+    const directed = DIRECTED.includes(settings.effect);
+    directionSeg.querySelectorAll("button").forEach((b) => (b.disabled = !directed));
+    if (!directionPicked) settings.direction = settings.effect === "layers" ? "up" : "down";
+    press(directionSeg, settings.direction);
+  }
   // Spread is a fraction of each object's smaller side, so the wide widget and screenshot need less.
   const narrow = matchMedia("(max-width: 560px)");
   const targets = [
@@ -249,8 +278,10 @@ pixelPrint(img, { effect: "scan", depth: "3d" });</code></pre>
     seg.addEventListener("click", (e) => {
       const button = e.target.closest("button");
       if (!button) return;
-      seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
       settings[seg.dataset.key] = button.dataset.value;
+      press(seg, button.dataset.value);
+      if (seg === directionSeg) directionPicked = true;
+      syncDirection();
       play();
     });
   }
@@ -263,6 +294,7 @@ pixelPrint(img, { effect: "scan", depth: "3d" });</code></pre>
   });
   document.getElementById("replay").addEventListener("click", play);
   document.getElementById("finish").addEventListener("click", () => prints.forEach((p) => p.finish()));
+  syncDirection();
   play();
 </script>
 </body>

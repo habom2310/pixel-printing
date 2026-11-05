@@ -3,7 +3,8 @@
 Split an image or a group of page elements into parts.
 Each part prints in a little apart from the others, under a glowing print head, then the parts fly together and assemble into the whole.
 
-- Three print effects: `scan` (a head sweeps down, pixels land along a ragged edge), `dust` (glowing pixels rain in), `layers` (built up from the bottom, layer by layer).
+- Two print heads, `scan` (pixels land along a ragged edge) and `layers` (a flat edge, layer by layer), that sweep down, up, right or left.
+- Four pixel patterns that fill a part cell by cell: `dust` (rains in toward a direction), `random` (static), `noise` (organic blobs) and `radial` (from the centre out).
 - 2D, or `depth: "3d"`: parts tilt toward the viewer with visible thickness, then swing flat as they lock in.
 - Works on an image (`<img>` or a CSS background image), split into percent rectangles, or on live elements, which print in place.
 - One dependency-free ES module, about 700 lines. No build step.
@@ -50,7 +51,8 @@ await print.finished; // or print.finish(), print.destroy(), print.setSpeed(2)
 
 - `targets`: an element, `{ el, parts?, src? }`, or an array of them.
 - `options`:
-  - `effect`: `"scan"` (default), `"dust"` (images only) or `"layers"`.
+  - `effect`: `"scan"` (default), `"layers"`, `"dust"`, `"random"`, `"noise"` or `"radial"`.
+  - `direction`: `"down"`, `"up"`, `"right"` or `"left"`, for `scan`, `layers` and `dust`. Default `"down"`, or `"up"` for `layers`.
   - `depth`: `"2d"` (default) or `"3d"`.
   - `spread`: how far parts start from their place, as a fraction of the object's smaller side. Default `0.3`.
   - `color`: print head, outline and tint colour. Default `"#5eead4"`.
@@ -58,7 +60,7 @@ await print.finished; // or print.finish(), print.destroy(), print.setSpeed(2)
   - `start`: `"visible"` (default) waits until the target scrolls into view; `"now"` starts at once.
   - `onDone`: runs once when the print completes or `finish()` is called, never after `destroy()`.
 - `pixelPrintAll(selector = "[data-pixel-print]", options)` starts one print per matching element.
-- `parseParts("x y w h, ...")` and `autoParts()` are exported helpers.
+- `parseParts("x y w h, ...")`, `autoParts()`, `EFFECTS` and `DIRECTIONS` are exported helpers.
 
 Types are in [src/pixel-printing.d.ts](src/pixel-printing.d.ts), and the full guide is in the [skill](skills/pixel-printing/SKILL.md).
 
@@ -66,7 +68,9 @@ Types are in [src/pixel-printing.d.ts](src/pixel-printing.d.ts), and the full gu
 
 - One `requestAnimationFrame` loop advances every target's clock by real elapsed time (clamped to 100ms per frame) times the speed, so a print never jumps ahead after a background tab.
 - Every frame is a pure function of that clock, so `finish()` and `destroy()` simply stop and restore.
-- The print edge is a `clip-path` polygon on each part, quantized to 4px cells. The head, outline, fresh pixels and landing flash are drawn on a small canvas per part.
+- A print head's edge is a `clip-path` polygon on each part, quantized to 4px cells.
+- Pixel patterns sort every cell of a part by when it prints. On an image, the printed cells are copied from the decoded image onto a canvas. On a live element, they become one `clip-path` polygon with a rectangle per run of cells, at 8px.
+- The head, outline, fresh pixels and landing flash are drawn on a small canvas per part.
 - The fresh-print tint is an SVG `feColorMatrix` filter per part, built with `createElementNS`, that maps brightness to the glow colour and cures back.
 - The original image is hidden with `opacity: 0` and shown again at the end. Live parts get their inline `transform`, `clip-path`, `filter` and `inert` back, and a reference count keeps overlapping prints from restoring too early.
 
