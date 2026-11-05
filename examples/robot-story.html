@@ -7,13 +7,14 @@
 <meta name="description" content="A robot prints, assembles and walks. Scroll to see what each part is made of." />
 <style>
   :root {
-    color-scheme: dark;
-    --bg: #070b10;
-    --panel: #0c131b;
-    --line: #1b2733;
-    --ink: #e6edf3;
-    --muted: #8b9bab;
-    --glow: #5eead4;
+    color-scheme: light;
+    --bg: #eef2f6;
+    --panel: #ffffff;
+    --raised: #e3e9f0;
+    --line: #d3dbe4;
+    --ink: #0f172a;
+    --muted: #526173;
+    --glow: #0d9488;
     --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     /* Set from JS to fit the viewport. */
     --rw: 300px;
@@ -21,27 +22,26 @@
     --range: 90px;
   }
   * { box-sizing: border-box; }
-  html { scroll-snap-type: y proximity; -webkit-text-size-adjust: 100%; }
+  html { scroll-snap-type: y proximity; scroll-padding-top: var(--bar, 0px); -webkit-text-size-adjust: 100%; }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
     background-image:
-      linear-gradient(rgb(255 255 255 / 0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgb(255 255 255 / 0.03) 1px, transparent 1px);
+      linear-gradient(rgb(15 23 42 / 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(15 23 42 / 0.05) 1px, transparent 1px);
     background-size: 24px 24px; background-attachment: fixed; }
   a { color: var(--glow); }
   .eyebrow { font: 500 12px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--glow); }
 
   /* The robot lives in a fixed dock: centred on the first and last screens, a miniature in the corner between. */
   .dock { position: fixed; z-index: 10; left: 50%; top: 60%; width: var(--rw); height: var(--rh);
-    margin: calc(var(--rh) / -2) 0 0 calc(var(--rw) / -2); pointer-events: none; perspective: 900px;
+    margin: calc(var(--rh) / -2) 0 0 calc(var(--rw) / -2); pointer-events: none;
     transform: var(--dock, none); transition: transform 1s cubic-bezier(0.65, 0, 0.35, 1); }
-  .dock::before { content: ""; position: absolute; inset: -40px calc(-1 * var(--range) - 40px); border: 4px solid var(--line);
-    border-radius: 56px; background: rgb(12 19 27 / 0.94); opacity: 0; transition: opacity 0.6s; }
-  .dock.mini::before { opacity: 1; }
   .walker { position: absolute; inset: 0; will-change: transform; }
   .robot { position: absolute; inset: 0; }
   .rp { position: absolute; }
   .limb { width: 100%; height: 100%; transition: filter 0.4s; }
   .limb svg { display: block; width: 100%; height: 100%; overflow: visible; }
+  /* It looks where it walks: the eyes glance toward --look. */
+  .eye { translate: var(--look, 0) 0; transition: translate 0.35s ease-out; }
 
   /* Walk cycle: arms and legs swing in opposition, the upper body bobs twice per stride. */
   .robot.walking .arm-l .limb, .robot.walking .arm-r .limb { transform-origin: 50% 10%; animation: swing 0.9s ease-in-out infinite alternate; }
@@ -60,7 +60,7 @@
   .robot[data-focus="legs"] :is(.leg-l, .leg-r) .limb,
   .robot[data-focus="head"] :is(.head, .antenna) .limb { filter: drop-shadow(0 0 10px var(--glow)) drop-shadow(0 0 3px var(--glow)); }
 
-  section { position: relative; min-height: 100vh; min-height: 100svh; scroll-snap-align: start; }
+  section { position: relative; min-height: calc(100vh - var(--bar, 0px)); min-height: calc(100svh - var(--bar, 0px)); scroll-snap-align: start; }
   .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
 
   .stage-screen { text-align: center; padding-top: clamp(40px, 9vh, 96px); }
@@ -71,7 +71,23 @@
   .assembled .hint { opacity: 1; }
   .hint::after { content: ""; display: block; width: 1px; height: 28px; margin: 10px auto 0; background: linear-gradient(var(--glow), transparent); }
   .btn { margin-top: 20px; font: 600 14px/1 system-ui, sans-serif; border-radius: 10px; padding: 12px 16px; cursor: pointer;
-    border: 0; background: var(--glow); color: #04231e; }
+    border: 0; background: var(--glow); color: #fff; }
+
+  /* Style picker, pinned to the top. */
+  .controls { position: sticky; top: 0; z-index: 20; background: rgb(238 242 246 / 0.88); backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+  .controls .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; padding-block: 10px; }
+  .group { display: flex; align-items: center; gap: 10px; }
+  .group > span { font: 500 11px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .seg { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 3px; }
+  .seg button { font: 500 13px/1 system-ui, sans-serif; color: var(--muted); background: none; border: 0; border-radius: 6px;
+    padding: 8px 12px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--raised); color: var(--ink); }
+  .seg button:hover:not(:disabled) { color: var(--ink); }
+  .seg button:disabled { opacity: 0.35; cursor: default; }
+  .seg.arrows button { font-size: 15px; width: 36px; padding-inline: 0; }
+  .controls .btn { margin: 0 0 0 auto; padding: 10px 14px; font-size: 13px; }
+  :is(.seg button, .btn):focus-visible { outline: 2px solid var(--glow); outline-offset: 2px; }
   .btn:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
 
   .part-screen { display: grid; align-items: center; padding: 72px 0 120px; }
@@ -85,7 +101,8 @@
 
   /* 600 by 480, with the 600 by 400 drawing (.frame) in the middle, so parts have room to start apart. */
   .detail { position: relative; aspect-ratio: 600 / 480; border: 1px solid var(--line); border-radius: 18px;
-    background: radial-gradient(ellipse at 50% 50%, rgb(94 234 212 / 0.07), transparent 60%), var(--panel); }
+    background: radial-gradient(ellipse at 50% 50%, rgb(13 148 136 / 0.06), transparent 60%), var(--panel);
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.05), 0 12px 32px rgb(15 23 42 / 0.06); }
   .detail .label-bay { position: absolute; left: 16px; top: 14px; font: 500 11px/1 var(--mono); letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }
   .frame { position: absolute; inset: 8.333% 0; }
   .parts { position: absolute; inset: 0; }
@@ -94,7 +111,7 @@
     transition-delay: calc(var(--i) * 0.12s); vector-effect: non-scaling-stroke; }
   .leaders circle { fill: var(--glow); opacity: 0; transition: opacity 0.3s; transition-delay: calc(var(--i) * 0.12s + 0.45s); }
   .num { position: absolute; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; display: none; place-items: center;
-    background: var(--glow); color: #04231e; font: 700 11px/1 system-ui, sans-serif; opacity: 0; transition: opacity 0.3s;
+    background: var(--glow); color: #fff; font: 700 11px/1 system-ui, sans-serif; opacity: 0; transition: opacity 0.3s;
     transition-delay: calc(var(--i) * 0.12s + 0.3s); }
   .legend .num { position: static; display: grid; margin: 0; opacity: 1; }
   .callout { position: absolute; width: 27%; translate: 0 -50%; font-size: 13px; line-height: 1.35; opacity: 0;
@@ -107,8 +124,16 @@
   .detail.explained .leaders circle, .detail.explained .num { opacity: 1; }
   .detail.explained .callout { opacity: 1; transform: none; }
 
+  @media (max-width: 900px) {
+    .group > span { display: none; }
+    .controls .wrap { gap: 8px 12px; }
+  }
   @media (max-width: 760px) {
     .wrap { padding: 0 16px; }
+    .controls .wrap { gap: 8px; }
+    .group:first-child, .group:first-child .seg { width: 100%; }
+    .group:first-child .seg button { flex: 1; padding-inline: 4px; font-size: 12px; }
+    .seg.arrows button { width: 34px; }
     .stage-screen p { font-size: 16px; }
     .part-screen { padding: 56px 0 140px; }
     .part-screen .wrap { grid-template-columns: 1fr; gap: 20px; }
@@ -117,12 +142,35 @@
     .legend { display: grid; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .dock, .dock::before, .limb, .callout, .leaders line, .leaders circle, .num { transition: none; }
+    .dock, .eye, .limb, .callout, .leaders line, .leaders circle, .num { transition: none; }
     .robot.walking .limb { animation: none !important; }
   }
 </style>
 </head>
 <body>
+<div class="controls" role="toolbar" aria-label="Print style">
+  <div class="wrap">
+    <div class="group"><span>Effect</span>
+      <div class="seg" data-key="effect" role="group" aria-label="Effect">
+        <button type="button" data-value="scan" aria-pressed="true">Scan</button>
+        <button type="button" data-value="layers" aria-pressed="false">Layers</button>
+        <button type="button" data-value="dust" aria-pressed="false">Dust</button>
+        <button type="button" data-value="random" aria-pressed="false">Random</button>
+        <button type="button" data-value="noise" aria-pressed="false">Noise</button>
+        <button type="button" data-value="radial" aria-pressed="false">Radial</button>
+      </div>
+    </div>
+    <div class="group"><span>Direction</span>
+      <div class="seg arrows" data-key="direction" role="group" aria-label="Direction">
+        <button type="button" data-value="down" aria-pressed="true" aria-label="Down">↓</button>
+        <button type="button" data-value="up" aria-pressed="false" aria-label="Up">↑</button>
+        <button type="button" data-value="right" aria-pressed="false" aria-label="Right">→</button>
+        <button type="button" data-value="left" aria-pressed="false" aria-label="Left">←</button>
+      </div>
+    </div>
+    <button type="button" class="btn" id="replay">Replay</button>
+  </div>
+</div>
 <div class="dock" id="dock" aria-hidden="true">
   <div class="walker" id="walker"><div class="robot" id="robot"></div></div>
 </div>
@@ -137,34 +185,34 @@
     <div class="hint">Scroll</div>
   </section>
 
-  <section class="part-screen" data-dock="mini" data-part="arms" data-effect="scan">
+  <section class="part-screen" data-dock="mini" data-part="arms">
     <div class="wrap">
       <div><div class="eyebrow">Part 01 / Arms</div><h2>Arms that print in four pieces</h2>
-        <p>Each arm is a servo, a hollow shell, a bearing and a gripper. They print top to bottom and press together at the shoulder.</p></div>
+        <p>Each arm is a servo, a hollow shell, a bearing and a gripper. They print one by one and press together at the shoulder.</p></div>
       <div class="detail" data-detail="arms"><div class="label-bay">Bay 01 / arm, exploded</div></div>
     </div>
   </section>
 
-  <section class="part-screen" data-dock="mini" data-part="body" data-effect="noise">
+  <section class="part-screen" data-dock="mini" data-part="body">
     <div class="wrap">
       <div><div class="eyebrow">Part 02 / Body</div><h2>A chest built around its core</h2>
-        <p>The body is a shell around a power core and a swappable battery. Material condenses in blobs, like resin curing.</p></div>
+        <p>The body is a shell around a power core and a swappable battery.</p></div>
       <div class="detail" data-detail="body"><div class="label-bay">Bay 02 / body, exploded</div></div>
     </div>
   </section>
 
-  <section class="part-screen" data-dock="mini" data-part="legs" data-effect="layers">
+  <section class="part-screen" data-dock="mini" data-part="legs">
     <div class="wrap">
       <div><div class="eyebrow">Part 03 / Legs</div><h2>Legs that carry the load</h2>
-        <p>Every leg builds up layer by layer from the bed: hip joint, piston, spring and foot.</p></div>
+        <p>Every leg is four printed parts: a hip joint, a piston, a spring and a foot.</p></div>
       <div class="detail" data-detail="legs"><div class="label-bay">Bay 03 / leg, exploded</div></div>
     </div>
   </section>
 
-  <section class="part-screen" data-dock="mini" data-part="head" data-effect="radial">
+  <section class="part-screen" data-dock="mini" data-part="head">
     <div class="wrap">
       <div><div class="eyebrow">Part 04 / Head</div><h2>A head full of sensors</h2>
-        <p>The head grows from the centre out: antenna, shell, a visor with two cameras, and an audio pod on each side.</p></div>
+        <p>The head is an antenna, a shell, a visor with two cameras, and an audio pod on each side.</p></div>
       <div class="detail" data-detail="head"><div class="label-bay">Bay 04 / head, exploded</div></div>
     </div>
   </section>
@@ -240,8 +288,8 @@
     ["rect", { x: 406, y: 140, width: 22, height: 64, rx: 8, fill: C.dark }],
     ["rect", { x: 192, y: 92, width: 216, height: 154, rx: 30, fill: C.shell }],
     ["rect", { x: 220, y: 124, width: 160, height: 78, rx: 18, fill: C.deep }],
-    ["circle", { cx: 264, cy: 163, r: 15, fill: C.eye, stroke: "none" }],
-    ["circle", { cx: 336, cy: 163, r: 15, fill: C.eye, stroke: "none" }],
+    ["circle", { cx: 264, cy: 163, r: 15, fill: C.eye, stroke: "none", class: "eye" }],
+    ["circle", { cx: 336, cy: 163, r: 15, fill: C.eye, stroke: "none", class: "eye" }],
     ["rect", { x: 270, y: 216, width: 60, height: 10, rx: 5, fill: C.dark, stroke: "none" }],
   ]);
   partEl(robot, "leg-l", [187, 499, 293, 619], R, leg(241));
@@ -346,13 +394,20 @@
     });
     frame.appendChild(leaders);
     stage.after(legend);
-    return { stage, parts, effect: stage.closest("section").dataset.effect };
+    return { stage, parts };
   });
 
+  const GLOW = "#0d9488";
+  const settings = { effect: "scan", direction: "down" };
+  let detailPrints = [];
   // Each detail prints when its screen scrolls into view, then explains itself.
-  details.forEach(({ stage, parts, effect }) =>
-    pixelPrint(parts, { effect, spread: 0.1, onDone: () => stage.classList.add("explained") }),
-  );
+  function printDetails() {
+    detailPrints.forEach((p) => p.destroy());
+    detailPrints = details.map(({ stage, parts }) => {
+      stage.classList.remove("explained");
+      return pixelPrint(parts, { ...settings, color: GLOW, spread: 0.1, onDone: () => stage.classList.add("explained") });
+    });
+  }
 
   // --- Size, docking and walking ---
   const dock = document.getElementById("dock");
@@ -366,6 +421,8 @@
     document.documentElement.style.setProperty("--rw", `${rw}px`);
     document.documentElement.style.setProperty("--rh", `${rh}px`);
     document.documentElement.style.setProperty("--range", `${size.range}px`);
+    // Snapped screens start below the pinned toolbar.
+    document.documentElement.style.setProperty("--bar", `${document.querySelector(".controls").offsetHeight}px`);
     place();
   }
   /** Centre, or a quarter-size miniature in the bottom-right corner. */
@@ -373,8 +430,8 @@
     if (docked === "center") return dock.style.setProperty("--dock", "none");
     const s = 0.25;
     const margin = innerWidth < 560 ? 12 : 24;
-    const halfW = ((size.rw / 2 + size.range + 44) * s);
-    const halfH = ((size.rh / 2 + 44) * s);
+    const halfW = (size.rw / 2 + size.range) * s;
+    const halfH = (size.rh / 2) * s;
     const x = innerWidth - margin - halfW - innerWidth / 2;
     const y = innerHeight - margin - halfH - innerHeight * 0.6;
     dock.style.setProperty("--dock", `translate(${x}px, ${y}px) scale(${s})`);
@@ -399,8 +456,8 @@
   );
   screens.forEach((s) => middle.observe(s));
 
-  // Walks left and right in a small area, turning to face where it goes.
-  const walk = { x: 0, target: 0, angle: 0, last: 0, frame: 0 };
+  // Walks left and right in a small area, glancing and leaning toward where it goes.
+  const walk = { x: 0, target: 0, look: 0, last: 0, frame: 0 };
   function pickTarget() {
     const r = size.range;
     let t;
@@ -412,14 +469,14 @@
     const dt = walk.last ? Math.min(now - walk.last, 100) / 1000 : 0;
     walk.last = now;
     const facing = Math.sign(walk.target - walk.x);
-    const goal = facing * 28;
-    // Turn first, then walk; speed ramps up as it finishes turning.
-    walk.angle += Math.sign(goal - walk.angle) * Math.min(Math.abs(goal - walk.angle), 140 * dt);
-    const ready = Math.max(0, 1 - Math.abs(goal - walk.angle) / 40);
+    // Look first, then walk; speed ramps up as the glance settles.
+    walk.look += Math.sign(facing - walk.look) * Math.min(Math.abs(facing - walk.look), 4 * dt);
+    const ready = Math.max(0, 1 - Math.abs(facing - walk.look));
     const speed = size.rw * 0.22 * ready;
     walk.x += facing * Math.min(Math.abs(walk.target - walk.x), speed * dt);
     if (Math.abs(walk.target - walk.x) < 0.5) pickTarget();
-    walker.style.transform = `translateX(${walk.x.toFixed(2)}px) rotateY(${walk.angle.toFixed(2)}deg)`;
+    robot.style.setProperty("--look", `${(walk.look * 9).toFixed(2)}px`);
+    walker.style.transform = `translateX(${walk.x.toFixed(2)}px) rotate(${(walk.look * 2.5).toFixed(2)}deg)`;
     walk.frame = requestAnimationFrame(step);
   }
   function startWalking() {
@@ -433,8 +490,9 @@
   function stopWalking() {
     cancelAnimationFrame(walk.frame);
     robot.classList.remove("walking");
-    Object.assign(walk, { x: 0, angle: 0 });
+    Object.assign(walk, { x: 0, look: 0 });
     walker.style.transform = "";
+    robot.style.removeProperty("--look");
   }
 
   let print;
@@ -442,13 +500,43 @@
     stopWalking();
     document.body.classList.remove("assembled");
     print?.destroy();
-    print = pixelPrint(robot, { start: "now", depth: "3d", spread: 0.22, onDone: startWalking });
+    print = pixelPrint(robot, { ...settings, start: "now", color: GLOW, spread: 0.22, onDone: startWalking });
   }
-  printRobot();
+
+  // --- Style picker ---
+  const DIRECTED = ["scan", "layers", "dust"];
+  let directionPicked = false;
+  const directionSeg = document.querySelector('[data-key="direction"]');
+  const press = (seg, value) =>
+    seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.value === value)));
+  // Patterns without a direction grey the arrows out; layers default to building up.
+  function syncDirection() {
+    directionSeg.querySelectorAll("button").forEach((b) => (b.disabled = !DIRECTED.includes(settings.effect)));
+    if (!directionPicked) settings.direction = settings.effect === "layers" ? "up" : "down";
+    press(directionSeg, settings.direction);
+  }
+  const replay = () => {
+    printRobot();
+    printDetails();
+  };
+  for (const seg of document.querySelectorAll(".controls .seg")) {
+    seg.addEventListener("click", (e) => {
+      const button = e.target.closest("button");
+      if (!button) return;
+      settings[seg.dataset.key] = button.dataset.value;
+      press(seg, button.dataset.value);
+      if (seg === directionSeg) directionPicked = true;
+      syncDirection();
+      replay();
+    });
+  }
+  document.getElementById("replay").addEventListener("click", replay);
   document.getElementById("again").addEventListener("click", () => {
     scrollTo({ top: 0, behavior: reduced ? "auto" : "smooth" });
-    printRobot();
+    replay();
   });
+  syncDirection();
+  replay();
 </script>
 </body>
 </html>
