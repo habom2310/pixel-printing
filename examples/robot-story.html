@@ -7,14 +7,17 @@
 <meta name="description" content="A robot prints, assembles and walks. Scroll to see what each part is made of." />
 <style>
   :root {
-    color-scheme: light;
-    --bg: #eef2f6;
-    --panel: #ffffff;
-    --raised: #e3e9f0;
-    --line: #d3dbe4;
-    --ink: #0f172a;
-    --muted: #526173;
-    --glow: #0d9488;
+    color-scheme: dark;
+    /* Blueprint: blue drafting paper, white linework, a cyan pen for what is being printed. */
+    --bg: #134a8e;
+    --paper-dark: #0e3a72;
+    --panel: rgb(10 44 92 / 0.55);
+    --raised: #f4f8ff;
+    --line: rgb(235 244 255 / 0.55);
+    --faint: rgb(235 244 255 / 0.22);
+    --ink: #f4f8ff;
+    --muted: #bcd0ec;
+    --glow: #9be7ff;
     --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     /* Set from JS to fit the viewport. */
     --rw: 300px;
@@ -23,18 +26,29 @@
   }
   * { box-sizing: border-box; }
   html { scroll-snap-type: y proximity; scroll-padding-top: var(--bar, 0px); -webkit-text-size-adjust: 100%; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+  body { margin: 0; color: var(--ink); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+    background-color: var(--bg);
+    /* Major grid every 120px, minor every 24px, and a soft vignette like printed paper. */
     background-image:
-      linear-gradient(rgb(15 23 42 / 0.05) 1px, transparent 1px),
-      linear-gradient(90deg, rgb(15 23 42 / 0.05) 1px, transparent 1px);
-    background-size: 24px 24px; background-attachment: fixed; }
+      linear-gradient(rgb(255 255 255 / 0.13) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(255 255 255 / 0.13) 1px, transparent 1px),
+      linear-gradient(rgb(255 255 255 / 0.055) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(255 255 255 / 0.055) 1px, transparent 1px),
+      radial-gradient(ellipse at 50% 40%, transparent 40%, var(--paper-dark) 100%);
+    background-size: 120px 120px, 120px 120px, 24px 24px, 24px 24px, 100% 100%;
+    background-attachment: fixed; }
   a { color: var(--glow); }
-  .eyebrow { font: 500 12px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--glow); }
+  .eyebrow { font: 500 12px/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--glow); }
+  h1, h2 { text-transform: uppercase; letter-spacing: 0.01em !important; font-weight: 800; }
 
   /* The robot lives in a fixed dock: centred on the first and last screens, a miniature in the corner between. */
-  .dock { position: fixed; z-index: 10; left: 50%; top: 60%; width: var(--rw); height: var(--rh);
+  .dock { position: fixed; z-index: 10; left: 50%; top: 62%; width: var(--rw); height: var(--rh);
     margin: calc(var(--rh) / -2) 0 0 calc(var(--rw) / -2); pointer-events: none;
     transform: var(--dock, none); transition: transform 1s cubic-bezier(0.65, 0, 0.35, 1); }
+  .dock::after { content: "TRAVEL"; position: absolute; left: calc(-1 * var(--range)); right: calc(-1 * var(--range)); top: calc(100% + 10px);
+    height: 8px; border: 1px solid var(--line); border-top: 0; padding-top: 14px; text-align: center;
+    font: 500 11px/1 var(--mono); letter-spacing: 0.14em; color: var(--muted); opacity: 0; transition: opacity 0.5s; }
+  .assembled .dock:not(.mini)::after { opacity: 1; }
   .walker { position: absolute; inset: 0; will-change: transform; }
   .robot { position: absolute; inset: 0; }
   .rp { position: absolute; }
@@ -70,20 +84,20 @@
     text-transform: uppercase; color: var(--muted); opacity: 0; transition: opacity 0.6s; }
   .assembled .hint { opacity: 1; }
   .hint::after { content: ""; display: block; width: 1px; height: 28px; margin: 10px auto 0; background: linear-gradient(var(--glow), transparent); }
-  .btn { margin-top: 20px; font: 600 14px/1 system-ui, sans-serif; border-radius: 10px; padding: 12px 16px; cursor: pointer;
-    border: 0; background: var(--glow); color: #fff; }
+  .btn { margin-top: 20px; font: 600 13px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; border-radius: 2px;
+    padding: 12px 16px; cursor: pointer; border: 1px solid var(--ink); background: var(--ink); color: var(--bg); }
 
   /* Style picker, pinned to the top. */
-  .controls { position: sticky; top: 0; z-index: 20; background: rgb(238 242 246 / 0.88); backdrop-filter: blur(10px);
+  .controls { position: sticky; top: 0; z-index: 20; background: rgb(14 58 114 / 0.88); backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
   .controls .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; padding-block: 10px; }
   .group { display: flex; align-items: center; gap: 10px; }
   .group > span { font: 500 11px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
-  .seg { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 3px; }
-  .seg button { font: 500 13px/1 system-ui, sans-serif; color: var(--muted); background: none; border: 0; border-radius: 6px;
-    padding: 8px 12px; cursor: pointer; }
-  .seg button[aria-pressed="true"] { background: var(--raised); color: var(--ink); }
-  .seg button:hover:not(:disabled) { color: var(--ink); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 2px; padding: 2px; gap: 2px; }
+  .seg button { font: 500 12px/1 var(--mono); letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); background: none;
+    border: 0; border-radius: 1px; padding: 8px 10px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--raised); color: var(--bg); }
+  .seg button:hover:not(:disabled):not([aria-pressed="true"]) { color: var(--ink); }
   .seg button:disabled { opacity: 0.35; cursor: default; }
   .seg.arrows button { font-size: 15px; width: 36px; padding-inline: 0; }
   .controls .btn { margin: 0 0 0 auto; padding: 10px 14px; font-size: 13px; }
@@ -96,29 +110,30 @@
   .part-screen p { color: var(--muted); margin: 0; }
   .legend { display: none; list-style: none; padding: 0; margin: 0; gap: 10px; }
   .legend li { display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: start; font-size: 14px; }
-  .legend b { display: block; }
+  .legend b { display: block; font: 600 12px/1.5 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
   .legend span { color: var(--muted); }
 
   /* 600 by 480, with the 600 by 400 drawing (.frame) in the middle, so parts have room to start apart. */
-  .detail { position: relative; aspect-ratio: 600 / 480; border: 1px solid var(--line); border-radius: 18px;
-    background: radial-gradient(ellipse at 50% 50%, rgb(13 148 136 / 0.06), transparent 60%), var(--panel);
-    box-shadow: 0 1px 2px rgb(15 23 42 / 0.05), 0 12px 32px rgb(15 23 42 / 0.06); }
-  .detail .label-bay { position: absolute; left: 16px; top: 14px; font: 500 11px/1 var(--mono); letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }
+  /* A drawing sheet: outer border, an inner border 8px in, and a title block in the corner. */
+  .detail { position: relative; aspect-ratio: 600 / 480; border: 1.5px solid var(--ink); background: var(--panel);
+    outline: 1px solid var(--faint); outline-offset: -9px; }
+  .detail .label-bay { position: absolute; right: 9px; bottom: 9px; padding: 6px 10px; border-left: 1px solid var(--faint);
+    border-top: 1px solid var(--faint); font: 500 10px/1.2 var(--mono); letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; }
   .frame { position: absolute; inset: 8.333% 0; }
   .parts { position: absolute; inset: 0; }
   .leaders { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
-  .leaders line { stroke: var(--glow); stroke-width: 1.2; stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset 0.6s cubic-bezier(0.3, 0, 0.2, 1);
+  .leaders line { stroke: var(--ink); stroke-width: 1; stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset 0.6s cubic-bezier(0.3, 0, 0.2, 1);
     transition-delay: calc(var(--i) * 0.12s); vector-effect: non-scaling-stroke; }
-  .leaders circle { fill: var(--glow); opacity: 0; transition: opacity 0.3s; transition-delay: calc(var(--i) * 0.12s + 0.45s); }
+  .leaders circle { fill: var(--bg); stroke: var(--ink); stroke-width: 1.5; vector-effect: non-scaling-stroke; opacity: 0; transition: opacity 0.3s; transition-delay: calc(var(--i) * 0.12s + 0.45s); }
   .num { position: absolute; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; display: none; place-items: center;
-    background: var(--glow); color: #fff; font: 700 11px/1 system-ui, sans-serif; opacity: 0; transition: opacity 0.3s;
+    background: var(--ink); color: var(--bg); font: 700 11px/1 var(--mono); opacity: 0; transition: opacity 0.3s;
     transition-delay: calc(var(--i) * 0.12s + 0.3s); }
   .legend .num { position: static; display: grid; margin: 0; opacity: 1; }
   .callout { position: absolute; width: 27%; translate: 0 -50%; font-size: 13px; line-height: 1.35; opacity: 0;
     transition: opacity 0.4s, transform 0.4s; transition-delay: calc(var(--i) * 0.12s + 0.35s); }
   .callout.left { left: 2%; text-align: right; transform: translateX(-8px); }
   .callout.right { left: 71%; transform: translateX(8px); }
-  .callout b { display: block; font-size: 14px; }
+  .callout b { display: block; font: 600 12px/1.4 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
   .callout span { color: var(--muted); }
   .detail.explained .leaders line { stroke-dashoffset: 0; }
   .detail.explained .leaders circle, .detail.explained .num { opacity: 1; }
@@ -132,7 +147,7 @@
     .wrap { padding: 0 16px; }
     .controls .wrap { gap: 8px; }
     .group:first-child, .group:first-child .seg { width: 100%; }
-    .group:first-child .seg button { flex: 1; padding-inline: 4px; font-size: 12px; }
+    .group:first-child .seg button { flex: 1; padding-inline: 2px; font-size: 11px; letter-spacing: 0; }
     .seg.arrows button { width: 34px; }
     .stage-screen p { font-size: 16px; }
     .part-screen { padding: 56px 0 140px; }
@@ -189,7 +204,7 @@
     <div class="wrap">
       <div><div class="eyebrow">Part 01 / Arms</div><h2>Arms that print in four pieces</h2>
         <p>Each arm is a servo, a hollow shell, a bearing and a gripper. They print one by one and press together at the shoulder.</p></div>
-      <div class="detail" data-detail="arms"><div class="label-bay">Bay 01 / arm, exploded</div></div>
+      <div class="detail" data-detail="arms"><div class="label-bay">Dwg 01 · arm · exploded · sheet 2/6</div></div>
     </div>
   </section>
 
@@ -197,7 +212,7 @@
     <div class="wrap">
       <div><div class="eyebrow">Part 02 / Body</div><h2>A chest built around its core</h2>
         <p>The body is a shell around a power core and a swappable battery.</p></div>
-      <div class="detail" data-detail="body"><div class="label-bay">Bay 02 / body, exploded</div></div>
+      <div class="detail" data-detail="body"><div class="label-bay">Dwg 02 · body · exploded · sheet 3/6</div></div>
     </div>
   </section>
 
@@ -205,7 +220,7 @@
     <div class="wrap">
       <div><div class="eyebrow">Part 03 / Legs</div><h2>Legs that carry the load</h2>
         <p>Every leg is four printed parts: a hip joint, a piston, a spring and a foot.</p></div>
-      <div class="detail" data-detail="legs"><div class="label-bay">Bay 03 / leg, exploded</div></div>
+      <div class="detail" data-detail="legs"><div class="label-bay">Dwg 03 · leg · exploded · sheet 4/6</div></div>
     </div>
   </section>
 
@@ -213,7 +228,7 @@
     <div class="wrap">
       <div><div class="eyebrow">Part 04 / Head</div><h2>A head full of sensors</h2>
         <p>The head is an antenna, a shell, a visor with two cameras, and an audio pod on each side.</p></div>
-      <div class="detail" data-detail="head"><div class="label-bay">Bay 04 / head, exploded</div></div>
+      <div class="detail" data-detail="head"><div class="label-bay">Dwg 04 · head · exploded · sheet 5/6</div></div>
     </div>
   </section>
 
@@ -397,7 +412,7 @@
     return { stage, parts };
   });
 
-  const GLOW = "#0d9488";
+  const GLOW = "#9be7ff";
   const settings = { effect: "scan", direction: "down" };
   let detailPrints = [];
   // Each detail prints when its screen scrolls into view, then explains itself.
@@ -415,7 +430,7 @@
   let size = { rw: 300, rh: 320, range: 90 };
   let docked = "center";
   function fit() {
-    const rh = Math.min(innerHeight * 0.46, 400, (innerWidth * 0.6 * 640) / 600);
+    const rh = Math.min(innerHeight * 0.44, 400, (innerWidth * 0.6 * 640) / 600);
     const rw = (rh * 600) / 640;
     size = { rw, rh, range: rw * 0.3 };
     document.documentElement.style.setProperty("--rw", `${rw}px`);
@@ -433,7 +448,7 @@
     const halfW = (size.rw / 2 + size.range) * s;
     const halfH = (size.rh / 2) * s;
     const x = innerWidth - margin - halfW - innerWidth / 2;
-    const y = innerHeight - margin - halfH - innerHeight * 0.6;
+    const y = innerHeight - margin - halfH - innerHeight * 0.62;
     dock.style.setProperty("--dock", `translate(${x}px, ${y}px) scale(${s})`);
   }
   addEventListener("resize", fit);
