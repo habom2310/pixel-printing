@@ -3,6 +3,8 @@
 Split an image or a group of page elements into parts.
 Each part prints in a little apart from the others, under a glowing print head, then the parts fly together and assemble into the whole.
 
+**[Live demo](https://habom2310.github.io/pixel-printing/)**: a robot prints, assembles and walks, then a scroll story takes it apart. The [playground](https://habom2310.github.io/pixel-printing/examples/) has every option.
+
 - Two print heads, `scan` (pixels land along a ragged edge) and `layers` (a flat edge, layer by layer), that sweep down, up, right or left.
 - Four pixel patterns that fill a part cell by cell: `dust` (rains in toward a direction), `random` (static), `noise` (organic blobs) and `radial` (from the centre out).
 - 2D, or `depth: "3d"`: parts tilt toward the viewer with visible thickness, then swing flat as they lock in.
@@ -87,9 +89,9 @@ npm test
 python3 -m http.server 4320
 ```
 
-Then open http://localhost:4320/examples/.
+Then open http://localhost:4320/ (the story) or http://localhost:4320/examples/ (the playground).
 
-[examples/robot-story.html](examples/robot-story.html) is a scroll story built on element mode.
+[index.html](index.html), the [live demo](https://habom2310.github.io/pixel-printing/), is a scroll story built on element mode.
 The robot is made of part elements, so after it prints and assembles, the same elements walk with CSS animations.
 Each screen below prints one part's exploded components with callouts, while the robot shrinks to a quarter-size miniature in the corner, then returns to the centre at the end.
 
