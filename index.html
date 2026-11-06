@@ -103,6 +103,8 @@
   .controls .btn { margin: 0 0 0 auto; padding: 10px 14px; font-size: 13px; }
   :is(.seg button, .btn):focus-visible { outline: 2px solid var(--glow); outline-offset: 2px; }
   .btn:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
+  .stage-screen p.more { margin-top: 20px; font: 500 12px/2 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; }
+  .more a { color: var(--glow); text-underline-offset: 3px; }
 
   .part-screen { display: grid; align-items: center; padding: 72px 0 120px; }
   .part-screen .wrap { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.5fr); gap: 40px; align-items: center; width: 100%; }
@@ -238,12 +240,14 @@
       <h2>All together now</h2>
       <p>Every part you just saw, printed and pressed into one robot.</p>
       <button type="button" class="btn" id="again">Print it again</button>
+      <p class="more"><a href="examples/">Playground: every option on an image, live elements and a screenshot</a><br />
+        <a href="https://github.com/habom2310/pixel-printing">Source, docs and the Agent Skill on GitHub</a></p>
     </div>
   </section>
 </main>
 
 <script type="module">
-  import { pixelPrint } from "../src/pixel-printing.js";
+  import { pixelPrint } from "./src/pixel-printing.js";
 
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const NS = "http://www.w3.org/2000/svg";
